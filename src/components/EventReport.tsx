@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardBody, Button } from './ui';
 import { ArrowLeft, Save, UploadCloud, Trash2, Camera, PenTool, Plus } from 'lucide-react';
 import { getLibroSubcontratas } from '../store';
+import { useDropzone } from 'react-dropzone';
 
 interface EventReportProps {
     tipo: 'reunion' | 'visita';
@@ -77,9 +78,9 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         }
     };
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            Array.from(e.target.files).forEach(file => {
+    const onDrop = (acceptedFiles: File[]) => {
+        if (acceptedFiles && acceptedFiles.length > 0) {
+            acceptedFiles.forEach(file => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
                     const base64String = reader.result as string;
@@ -92,6 +93,8 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
             });
         }
     };
+
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'image/*': [] } });
 
     const handleRemovePhoto = (photoId: number) => {
         setFormData((prev: any) => ({
@@ -348,30 +351,41 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                     <Card>
                         <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Reporte Fotográfico</h3>
-                            <label className="btn btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
-                                <UploadCloud size={16} /> Subir Fotos
-                                <input type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={handlePhotoUpload} />
-                            </label>
                         </CardHeader>
                         <CardBody>
-                            {formData.fotos && formData.fotos.length > 0 ? (
+                            <div
+                                {...getRootProps()}
+                                style={{
+                                    border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                    borderRadius: 'var(--radius-lg)',
+                                    padding: '2rem',
+                                    textAlign: 'center',
+                                    backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                    cursor: 'pointer',
+                                    transition: 'all var(--transition-fast)',
+                                    marginBottom: formData.fotos && formData.fotos.length > 0 ? '1rem' : '0'
+                                }}
+                            >
+                                <input {...getInputProps()} />
+                                <UploadCloud size={32} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                                <p style={{ margin: 0, fontSize: '0.875rem' }}>
+                                    {isDragActive ? "Suelta las imágenes aquí..." : "Arrastra imágenes o haz clic para subir"}
+                                </p>
+                            </div>
+
+                            {formData.fotos && formData.fotos.length > 0 && (
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.75rem' }}>
                                     {formData.fotos.map((photo: any) => (
                                         <div key={photo.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
                                             <img src={photo.url} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             <button
-                                                onClick={() => handleRemovePhoto(photo.id)}
+                                                onClick={(e) => { e.stopPropagation(); handleRemovePhoto(photo.id); }}
                                                 style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(255,255,255,0.8)', padding: '4px', borderRadius: '50%', color: '#ef4444', border: 'none', cursor: 'pointer' }}
                                             >
                                                 <Trash2 size={14} />
                                             </button>
                                         </div>
                                     ))}
-                                </div>
-                            ) : (
-                                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--color-surface)' }}>
-                                    <Camera size={24} style={{ margin: '0 auto 0.5rem' }} />
-                                    <p style={{ margin: 0, fontSize: '0.875rem' }}>No hay fotos añadidas al informe</p>
                                 </div>
                             )}
                         </CardBody>

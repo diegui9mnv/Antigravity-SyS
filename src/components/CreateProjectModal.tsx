@@ -9,6 +9,75 @@ interface CreateProjectModalProps {
     initialData?: any;
 }
 
+const MultiSelect = ({ options, value, onChange, placeholder }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredOptions = options.filter((o: any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const handleSelect = (id: string) => {
+        if (value.includes(id)) {
+            onChange(value.filter((v: string) => v !== id));
+        } else {
+            onChange([...value, id]);
+        }
+    };
+
+    return (
+        <div style={{ position: 'relative' }}>
+            <div
+                className="input-field"
+                style={{ minHeight: '38px', backgroundColor: 'white', display: 'flex', flexWrap: 'wrap', gap: '4px', cursor: 'text' }}
+                onClick={() => setIsOpen(true)}
+            >
+                {value.length === 0 && <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span>}
+                {value.map((v: string) => {
+                    const opt = options.find((o: any) => o.value === v);
+                    return opt ? (
+                        <span key={v} style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {opt.label}
+                            <X size={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); handleSelect(v); }} />
+                        </span>
+                    ) : null;
+                })}
+            </div>
+            {isOpen && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid var(--border)', borderRadius: '4px', zIndex: 10, maxHeight: '200px', overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
+                    <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, backgroundColor: 'white' }}>
+                        <input
+                            type="text"
+                            placeholder="Buscar..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            style={{ width: '100%', padding: '0.25rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                            onClick={e => e.stopPropagation()}
+                        />
+                    </div>
+                    {filteredOptions.length === 0 ? (
+                        <div style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>No hay resultados</div>
+                    ) : (
+                        filteredOptions.map((o: any) => (
+                            <div
+                                key={o.value}
+                                onClick={() => handleSelect(o.value)}
+                                style={{
+                                    padding: '0.5rem',
+                                    cursor: 'pointer',
+                                    backgroundColor: value.includes(o.value) ? 'var(--color-primary-light)' : 'transparent',
+                                    borderBottom: '1px solid var(--border-light)'
+                                }}
+                            >
+                                {o.label}
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+            {isOpen && <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setIsOpen(false)} />}
+        </div>
+    );
+};
+
 export default function CreateProjectModal({ onClose, onCreated, initialData }: CreateProjectModalProps) {
     const [empresas, setEmpresas] = useState<any[]>([]);
     const [personas, setPersonas] = useState<any[]>([]);
@@ -26,11 +95,11 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
         duracionNum: '',
         duracionUnidad: 'meses',
         fechaFin: '',
-        contratistaId: '',
-        promotorId: '',
-        coordinadorSysId: '',
-        directorObraId: '',
-        jefeObraId: ''
+        contratistaId: [] as string[],
+        promotorId: [] as string[],
+        coordinadorSysId: [] as string[],
+        directorObraId: [] as string[],
+        jefeObraId: [] as string[]
     });
 
     useEffect(() => {
@@ -51,11 +120,11 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                 duracionNum: initialData.duracionNum || '',
                 duracionUnidad: initialData.duracionUnidad || 'meses',
                 fechaFin: initialData.fechaFin || '',
-                contratistaId: initialData.contratistaId || '',
-                promotorId: initialData.promotorId || '',
-                coordinadorSysId: initialData.coordinadorSysId || '',
-                directorObraId: initialData.directorObraId || '',
-                jefeObraId: initialData.jefeObraId || ''
+                contratistaId: Array.isArray(initialData.contratistaId) ? initialData.contratistaId : (initialData.contratistaId ? [initialData.contratistaId] : []),
+                promotorId: Array.isArray(initialData.promotorId) ? initialData.promotorId : (initialData.promotorId ? [initialData.promotorId] : []),
+                coordinadorSysId: Array.isArray(initialData.coordinadorSysId) ? initialData.coordinadorSysId : (initialData.coordinadorSysId ? [initialData.coordinadorSysId] : []),
+                directorObraId: Array.isArray(initialData.directorObraId) ? initialData.directorObraId : (initialData.directorObraId ? [initialData.directorObraId] : []),
+                jefeObraId: Array.isArray(initialData.jefeObraId) ? initialData.jefeObraId : (initialData.jefeObraId ? [initialData.jefeObraId] : [])
             });
         }
     }, [initialData]);
@@ -230,38 +299,48 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div className="input-group">
                                     <label className="input-label">Contratista</label>
-                                    <select name="contratistaId" value={formData.contratistaId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                        <option value="">Ninguno</option>
-                                        {empresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
-                                    </select>
+                                    <MultiSelect
+                                        options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
+                                        value={formData.contratistaId}
+                                        onChange={(val: string[]) => setFormData(p => ({ ...p, contratistaId: val }))}
+                                        placeholder="Seleccionar..."
+                                    />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Promotor</label>
-                                    <select name="promotorId" value={formData.promotorId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                        <option value="">Ninguno</option>
-                                        {empresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
-                                    </select>
+                                    <MultiSelect
+                                        options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
+                                        value={formData.promotorId}
+                                        onChange={(val: string[]) => setFormData(p => ({ ...p, promotorId: val }))}
+                                        placeholder="Seleccionar..."
+                                    />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Coordinador SyS</label>
-                                    <select name="coordinadorSysId" value={formData.coordinadorSysId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                        <option value="">Ninguno</option>
-                                        {getPersonasByTipo('Coordinador SyS').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
-                                    </select>
+                                    <MultiSelect
+                                        options={getPersonasByTipo('Coordinador SyS').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
+                                        value={formData.coordinadorSysId}
+                                        onChange={(val: string[]) => setFormData(p => ({ ...p, coordinadorSysId: val }))}
+                                        placeholder="Seleccionar..."
+                                    />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Director de obra</label>
-                                    <select name="directorObraId" value={formData.directorObraId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                        <option value="">Ninguno</option>
-                                        {getPersonasByTipo('Director de obra').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
-                                    </select>
+                                    <MultiSelect
+                                        options={getPersonasByTipo('Director de obra').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
+                                        value={formData.directorObraId}
+                                        onChange={(val: string[]) => setFormData(p => ({ ...p, directorObraId: val }))}
+                                        placeholder="Seleccionar..."
+                                    />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Jefe de obra</label>
-                                    <select name="jefeObraId" value={formData.jefeObraId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                        <option value="">Ninguno</option>
-                                        {getPersonasByTipo('Jefe de obra').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
-                                    </select>
+                                    <MultiSelect
+                                        options={getPersonasByTipo('Jefe de obra').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
+                                        value={formData.jefeObraId}
+                                        onChange={(val: string[]) => setFormData(p => ({ ...p, jefeObraId: val }))}
+                                        placeholder="Seleccionar..."
+                                    />
                                 </div>
                             </div>
                         </div>

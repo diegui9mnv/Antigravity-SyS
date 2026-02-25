@@ -252,36 +252,12 @@ export const fileStructureTemplate = [
     type: "folder",
     children: [
       {
-        id: "pss-anexos",
-        name: "PSS/DGP y Anexos",
-        type: "folder",
-        children: [
-          { id: "pss-anexos-cat", name: "PSS/DGP y Anexos", type: "category" }
-        ]
-      },
-      {
         id: "informes",
         name: "Informes",
         type: "folder",
         children: [
           { id: "inf-mod", name: "Informe modificaciones", type: "category" },
           { id: "inf-fav", name: "Informe favorable", type: "category" }
-        ]
-      },
-      {
-        id: "acta-aprob",
-        name: "Acta de aprobación",
-        type: "folder",
-        children: [
-          { id: "acta-aprob-cat", name: "Acta de aprobación", type: "category" }
-        ]
-      },
-      {
-        id: "todos-pss",
-        name: "Todos",
-        type: "folder",
-        children: [
-          { id: "todos-pss-cat", name: "Todos", type: "category" }
         ]
       }
     ]
