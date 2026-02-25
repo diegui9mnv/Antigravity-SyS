@@ -10,71 +10,71 @@ interface CreateProjectModalProps {
 }
 
 const MultiSelect = ({ options, value, onChange, placeholder }: any) => {
-    const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredOptions = options.filter((o: any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const handleSelect = (id: string) => {
-        if (value.includes(id)) {
-            onChange(value.filter((v: string) => v !== id));
+    const handleSelect = (id: string, isSelect: boolean) => {
+        if (isSelect) {
+            if (!value.includes(id)) onChange([...value, id]);
         } else {
-            onChange([...value, id]);
+            onChange(value.filter((v: string) => v !== id));
         }
     };
 
     return (
-        <div style={{ position: 'relative' }}>
-            <div
-                className="input-field"
-                style={{ minHeight: '38px', backgroundColor: 'white', display: 'flex', flexWrap: 'wrap', gap: '4px', cursor: 'text' }}
-                onClick={() => setIsOpen(true)}
-            >
-                {value.length === 0 && <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span>}
-                {value.map((v: string) => {
-                    const opt = options.find((o: any) => o.value === v);
-                    return opt ? (
-                        <span key={v} style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            {opt.label}
-                            <X size={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); handleSelect(v); }} />
-                        </span>
-                    ) : null;
-                })}
-            </div>
-            {isOpen && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid var(--border)', borderRadius: '4px', zIndex: 10, maxHeight: '200px', overflowY: 'auto', boxShadow: 'var(--shadow-md)' }}>
-                    <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, backgroundColor: 'white' }}>
-                        <input
-                            type="text"
-                            placeholder="Buscar..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            style={{ width: '100%', padding: '0.25rem', border: '1px solid var(--border)', borderRadius: '4px' }}
-                            onClick={e => e.stopPropagation()}
-                        />
+        <details style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'white' }}>
+            <summary style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', outline: 'none', userSelect: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '0.875rem', color: value.length > 0 ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                    {value.length > 0 ? `${value.length} seleccionado(s)` : placeholder}
+                </span>
+            </summary>
+
+            <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border-color)', backgroundColor: 'white', borderRadius: '0 0 var(--radius-md) var(--radius-md)' }}>
+                {value.length > 0 && (
+                    <div style={{ paddingBottom: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {value.map((v: string) => {
+                            const opt = options.find((o: any) => o.value === v);
+                            if (!opt) return null;
+                            return (
+                                <span key={v} style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', padding: '0.15rem 0.5rem', borderRadius: '12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', border: '1px solid var(--border-color)' }}>
+                                    {opt.label}
+                                    <X size={12} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={(e) => { e.preventDefault(); handleSelect(v, false); }} />
+                                </span>
+                            );
+                        })}
                     </div>
+                )}
+
+                <input
+                    type="text"
+                    placeholder="Buscar agente..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.875rem', marginBottom: '0.5rem' }}
+                />
+
+                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                     {filteredOptions.length === 0 ? (
-                        <div style={{ padding: '0.5rem', color: 'var(--text-muted)' }}>No hay resultados</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '1rem 0' }}>No hay resultados</div>
                     ) : (
-                        filteredOptions.map((o: any) => (
-                            <div
-                                key={o.value}
-                                onClick={() => handleSelect(o.value)}
-                                style={{
-                                    padding: '0.5rem',
-                                    cursor: 'pointer',
-                                    backgroundColor: value.includes(o.value) ? 'var(--color-primary-light)' : 'transparent',
-                                    borderBottom: '1px solid var(--border-light)'
-                                }}
-                            >
-                                {o.label}
-                            </div>
-                        ))
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            {filteredOptions.map((o: any) => (
+                                <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.35rem 0.5rem', fontSize: '0.875rem', borderRadius: '4px' }} className="hover:bg-slate-50">
+                                    <input
+                                        type="checkbox"
+                                        checked={value.includes(o.value)}
+                                        onChange={(e) => handleSelect(o.value, e.target.checked)}
+                                        style={{ accentColor: 'var(--color-primary)' }}
+                                    />
+                                    {o.label}
+                                </label>
+                            ))}
+                        </div>
                     )}
                 </div>
-            )}
-            {isOpen && <div style={{ position: 'fixed', inset: 0, zIndex: 9 }} onClick={() => setIsOpen(false)} />}
-        </div>
+            </div>
+        </details>
     );
 };
 

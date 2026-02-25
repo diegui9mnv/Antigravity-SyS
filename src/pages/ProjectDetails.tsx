@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase } from 'lucide-react';
 import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile } from '../store';
 import { Card, Badge, Button } from '../components/ui';
 import { useDropzone } from 'react-dropzone';
@@ -18,6 +18,10 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
     else if (node.name.includes("Informes")) NodeIcon = FileText;
     else if (node.name.includes("Siniestralidad")) NodeIcon = Shield;
     else if (node.name.includes("PSS/DGP")) NodeIcon = FileBadge;
+    else if (node.name.includes("Documentación") || node.name.includes("Proyecto")) NodeIcon = FileStack;
+    else if (node.name.includes("Comunicados")) NodeIcon = Mail;
+    else if (node.name.includes("Gestión")) NodeIcon = Briefcase;
+    else if (node.name.includes("Visitas") || node.name.includes("Reuniones") || node.name.includes("Anotaciones")) NodeIcon = Calendar;
     else if (node.type === 'category') NodeIcon = FileIcon;
 
     // We only show root items here. Nested items are handled in the Content Area.
@@ -287,9 +291,16 @@ export default function ProjectDetails() {
     return (
         <>
             <div className="animate-fade-in">
-                <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', color: 'var(--text-muted)' }}>
-                    <ArrowLeft size={16} /> Volver a Obras
-                </Link>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
+                        <ArrowLeft size={16} /> Volver a Obras
+                    </Link>
+                    {!isSidebarOpen && (
+                        <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(true)} style={{ display: 'flex', gap: '0.5rem' }}>
+                            <Menu size={16} /> Mostrar Árbol
+                        </Button>
+                    )}
+                </div>
 
                 <div className="flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
                     <div>
@@ -316,11 +327,25 @@ export default function ProjectDetails() {
                     {/* Document Tree Sidebar */}
                     {isSidebarOpen && (
                         <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <div className="card-header flex justify-between items-center">
-                                <h3 style={{ fontSize: '1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div className="card-header flex justify-between items-center" style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                                <button
+                                    onClick={() => {
+                                        setActiveCategory(null);
+                                        setFolderStack([]);
+                                        setActiveEvent(null);
+                                    }}
+                                    style={{
+                                        fontSize: '1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary-dark)',
+                                        fontWeight: 600, padding: '0.25rem 0.5rem', borderRadius: '0.25rem',
+                                        outline: 'none'
+                                    }}
+                                    className="hover:bg-slate-100 transition-colors"
+                                    title="Ir al resumen global"
+                                >
                                     <Folders size={18} /> Árbol Documental
-                                </h3>
-                                <button className="btn-icon" onClick={() => setIsSidebarOpen(false)}>
+                                </button>
+                                <button className="btn-icon" onClick={() => setIsSidebarOpen(false)} title="Ocultar panel">
                                     <Menu size={18} />
                                 </button>
                             </div>
@@ -468,13 +493,23 @@ export default function ProjectDetails() {
                                                     <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
                                                         <div>
                                                             <strong>Promotor: </strong>
-                                                            <span className="text-gray-600">{formatAgentName(obra.promotorId, 'empresa')}</span>
+                                                            <div className="flex flex-col gap-1 mt-1">
+                                                                {(Array.isArray(obra.promotorId) ? obra.promotorId : [obra.promotorId]).filter(Boolean).map((id: string) => (
+                                                                    <span key={id} className="text-gray-600">• {formatAgentName(id, 'empresa')}</span>
+                                                                ))}
+                                                                {(!obra.promotorId || (Array.isArray(obra.promotorId) && obra.promotorId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
                                                         <div>
                                                             <strong>Contratista Principal: </strong>
-                                                            <span className="text-gray-600">{formatAgentName(obra.contratistaId, 'empresa')}</span>
+                                                            <div className="flex flex-col gap-1 mt-1">
+                                                                {(Array.isArray(obra.contratistaId) ? obra.contratistaId : [obra.contratistaId]).filter(Boolean).map((id: string) => (
+                                                                    <span key={id} className="text-gray-600">• {formatAgentName(id, 'empresa')}</span>
+                                                                ))}
+                                                                {(!obra.contratistaId || (Array.isArray(obra.contratistaId) && obra.contratistaId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     {/* Others mapping */}
@@ -512,19 +547,34 @@ export default function ProjectDetails() {
                                                     <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
                                                         <div>
                                                             <div className="text-xs text-primary font-bold mb-1"><FileBadge size={14} className="inline mr-1" />Director de Obra</div>
-                                                            <span className="text-gray-700 font-medium">{formatAgentName(obra.directorObraId, 'persona')}</span>
+                                                            <div className="flex flex-col gap-1">
+                                                                {(Array.isArray(obra.directorObraId) ? obra.directorObraId : [obra.directorObraId]).filter(Boolean).map((id: string) => (
+                                                                    <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
+                                                                ))}
+                                                                {(!obra.directorObraId || (Array.isArray(obra.directorObraId) && obra.directorObraId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
                                                         <div>
                                                             <div className="text-xs text-primary font-bold mb-1"><FileBadge size={14} className="inline mr-1" />Jefe de Obra</div>
-                                                            <span className="text-gray-700 font-medium">{formatAgentName(obra.jefeObraId, 'persona')}</span>
+                                                            <div className="flex flex-col gap-1">
+                                                                {(Array.isArray(obra.jefeObraId) ? obra.jefeObraId : [obra.jefeObraId]).filter(Boolean).map((id: string) => (
+                                                                    <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
+                                                                ))}
+                                                                {(!obra.jefeObraId || (Array.isArray(obra.jefeObraId) && obra.jefeObraId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
                                                         <div>
                                                             <div className="text-xs text-primary font-bold mb-1"><Shield size={14} className="inline mr-1" />Coordinador SyS</div>
-                                                            <span className="text-gray-700 font-medium">{formatAgentName(obra.coordinadorSysId, 'persona')}</span>
+                                                            <div className="flex flex-col gap-1">
+                                                                {(Array.isArray(obra.coordinadorSysId) ? obra.coordinadorSysId : [obra.coordinadorSysId]).filter(Boolean).map((id: string) => (
+                                                                    <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
+                                                                ))}
+                                                                {(!obra.coordinadorSysId || (Array.isArray(obra.coordinadorSysId) && obra.coordinadorSysId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
+                                                            </div>
                                                         </div>
                                                     </div>
 
