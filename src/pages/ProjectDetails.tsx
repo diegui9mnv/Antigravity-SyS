@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, ArrowRight, Building2, FileBadge, Shield } from 'lucide-react';
-import { getObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata } from '../store';
+import { getObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata } from '../store';
 import { Card, Badge, Button } from '../components/ui';
 import { useDropzone } from 'react-dropzone';
 import { EventModal } from '../components/EventModal';
 import { EventReport } from '../components/EventReport';
 import { EmpresaModal, PersonaModal } from '../components/ContactModals';
+import { LibroSubcontrataModal } from '../components/LibroSubcontrataModal';
 
 // Recursive component for rendering the document tree
 const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack }: any) => {
@@ -75,6 +76,7 @@ export default function ProjectDetails() {
     // Contactos View State
     const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
+    const [isLibroModalOpen, setIsLibroModalOpen] = useState(false);
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
     const [allEmpresas, setAllEmpresas] = useState<any[]>([]);
 
@@ -451,7 +453,7 @@ export default function ProjectDetails() {
                                             <h4 style={{ margin: 0, fontSize: '1rem' }}>
                                                 Libro de Subcontratación ({libroSubcontratas.length} registros)
                                             </h4>
-                                            <Button size="sm" onClick={() => alert("Función para añadir fila al libro.")}>+ Añadir Fila</Button>
+                                            <Button size="sm" onClick={() => setIsLibroModalOpen(true)}>+ Añadir Fila</Button>
                                         </div>
                                         {libroSubcontratas.length === 0 ? (
                                             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No hay registros en el libro de subcontratación.</p>
@@ -664,6 +666,18 @@ export default function ProjectDetails() {
                     }}
                 />
             )}
+
+            <LibroSubcontrataModal
+                isOpen={isLibroModalOpen}
+                onClose={() => setIsLibroModalOpen(false)}
+                empresas={allEmpresas}
+                libroActual={libroSubcontratas}
+                onSave={(data) => {
+                    saveLibroSubcontrata(id!, data);
+                    setLibroSubcontratas(getLibroSubcontratas(id!));
+                    setIsLibroModalOpen(false);
+                }}
+            />
 
         </div>
     );
