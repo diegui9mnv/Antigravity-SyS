@@ -101,6 +101,13 @@ a:hover {
   padding: 0 1.5rem;
 }
 
+.container-fluid {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
 .flex {
   display: flex;
 }
@@ -186,13 +193,12 @@ a:hover {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+  transition: box-shadow var(--transition-normal);
   overflow: hidden;
 }
 
 .card:hover {
   box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
 }
 
 .card-header {
@@ -261,7 +267,7 @@ a:hover {
   color: var(--status-solicitud);
 }
 
-.badge-curso {
+.badge-en-curso {
   background-color: rgba(59, 130, 246, 0.1);
   color: var(--status-curso);
 }
@@ -371,4 +377,31 @@ a:hover {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+/* Responsive Grid Adjustments */
+@media (max-width: 768px) {
+  .project-details-grid {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  .project-details-grid>* {
+    min-height: 400px;
+  }
+}
+
+.contactos-split-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  height: 100%;
+}
+
+@media (max-width: 1024px) {
+  .contactos-split-view {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
 }

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit2, Trash2, FolderOpen } from 'lucide-react';
 import { getObras, initStore, deleteObra } from '../store';
 import { Badge, Button } from '../components/ui';
 import CreateProjectModal from '../components/CreateProjectModal';
 
 export default function ProjectsList() {
+    const navigate = useNavigate();
     const [obras, setObras] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingObra, setEditingObra] = useState<any>(null);
@@ -32,14 +33,16 @@ export default function ProjectsList() {
         setEditingObra(null);
     };
 
-    const handleDelete = (id: string, denominacion: string) => {
+    const handleDelete = (e: React.MouseEvent, id: string, denominacion: string) => {
+        e.stopPropagation();
         if (window.confirm(`¿Estás seguro de querer eliminar la obra "${denominacion}"? Esto no se puede deshacer.`)) {
             deleteObra(id);
             loadObras();
         }
     };
 
-    const openEditModal = (obra: any) => {
+    const openEditModal = (e: React.MouseEvent, obra: any) => {
+        e.stopPropagation();
         setEditingObra(obra);
         setIsModalOpen(true);
     };
@@ -118,7 +121,7 @@ export default function ProjectsList() {
                     <tbody>
                         {filteredObras.length > 0 ? (
                             filteredObras.map(obra => (
-                                <tr key={obra.id}>
+                                <tr key={obra.id} onClick={() => navigate(`/obra/${obra.id}`)} style={{ cursor: 'pointer' }}>
                                     <td style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>{obra.denominacion}</td>
                                     <td>{obra.municipio}</td>
                                     <td>{obra.expediente}</td>
@@ -129,13 +132,13 @@ export default function ProjectsList() {
                                     </td>
                                     <td>
                                         <div className="actions-cell">
-                                            <Link to={`/obra/${obra.id}`} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Documentación">
+                                            <button onClick={(e) => { e.stopPropagation(); navigate(`/obra/${obra.id}`); }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Documentación">
                                                 <FolderOpen size={18} />
-                                            </Link>
-                                            <button onClick={() => openEditModal(obra)} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
+                                            </button>
+                                            <button onClick={(e) => openEditModal(e, obra)} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
                                                 <Edit2 size={18} />
                                             </button>
-                                            <button onClick={() => handleDelete(obra.id, obra.denominacion)} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
+                                            <button onClick={(e) => handleDelete(e, obra.id, obra.denominacion)} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>

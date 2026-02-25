@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { saveObra, updateObra } from '../store';
+import { saveObra, updateObra, getEmpresas, getPersonas, typologiesTree } from '../store';
 import { Button } from './ui';
 import { X } from 'lucide-react';
 
@@ -10,38 +10,101 @@ interface CreateProjectModalProps {
 }
 
 export default function CreateProjectModal({ onClose, onCreated, initialData }: CreateProjectModalProps) {
+    const [empresas, setEmpresas] = useState<any[]>([]);
+    const [personas, setPersonas] = useState<any[]>([]);
+
     const [formData, setFormData] = useState({
+        tipologiaCat: '',
+        tipologiaSub: '',
+        tipologiaTipo: '',
         denominacion: '',
         municipio: '',
         expediente: '',
         codigoObra: '',
         estado: 'solicitud',
         fechaInicio: '',
-        fechaFin: ''
+        duracionNum: '',
+        duracionUnidad: 'meses',
+        fechaFin: '',
+        contratistaId: '',
+        promotorId: '',
+        coordinadorSysId: '',
+        directorObraId: '',
+        jefeObraId: ''
     });
 
     useEffect(() => {
+        setEmpresas(getEmpresas());
+        setPersonas(getPersonas());
+
         if (initialData) {
             setFormData({
+                tipologiaCat: initialData.tipologiaCat || '',
+                tipologiaSub: initialData.tipologiaSub || '',
+                tipologiaTipo: initialData.tipologiaTipo || '',
                 denominacion: initialData.denominacion || '',
                 municipio: initialData.municipio || '',
                 expediente: initialData.expediente || '',
                 codigoObra: initialData.codigoObra || '',
                 estado: initialData.estado || 'solicitud',
                 fechaInicio: initialData.fechaInicio || '',
-                fechaFin: initialData.fechaFin || ''
+                duracionNum: initialData.duracionNum || '',
+                duracionUnidad: initialData.duracionUnidad || 'meses',
+                fechaFin: initialData.fechaFin || '',
+                contratistaId: initialData.contratistaId || '',
+                promotorId: initialData.promotorId || '',
+                coordinadorSysId: initialData.coordinadorSysId || '',
+                directorObraId: initialData.directorObraId || '',
+                jefeObraId: initialData.jefeObraId || ''
             });
         }
     }, [initialData]);
 
+    // Handle dependent typology resets
+    const handleTypologyChange = (name: string, value: string) => {
+        if (name === 'tipologiaCat') {
+            setFormData(prev => ({ ...prev, tipologiaCat: value, tipologiaSub: '', tipologiaTipo: '' }));
+        } else if (name === 'tipologiaSub') {
+            setFormData(prev => ({ ...prev, tipologiaSub: value, tipologiaTipo: '' }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    // Auto-calculate end date
+    useEffect(() => {
+        if (formData.fechaInicio && formData.duracionNum) {
+            const date = new Date(formData.fechaInicio);
+            const amount = parseInt(formData.duracionNum);
+            if (!isNaN(amount)) {
+                if (formData.duracionUnidad === 'dias') {
+                    date.setDate(date.getDate() + amount);
+                } else if (formData.duracionUnidad === 'meses') {
+                    date.setMonth(date.getMonth() + amount);
+                } else if (formData.duracionUnidad === 'años') {
+                    date.setFullYear(date.getFullYear() + amount);
+                }
+                setFormData(prev => ({ ...prev, fechaFin: date.toISOString().split('T')[0] }));
+            }
+        }
+    }, [formData.fechaInicio, formData.duracionNum, formData.duracionUnidad]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Include full typology path as a single string for convenience
+        const fullTypology = [formData.tipologiaCat, formData.tipologiaSub, formData.tipologiaTipo].filter(Boolean).join(' > ');
+
+        const finalData = {
+            ...formData,
+            tipologia: fullTypology
+        };
+
         if (initialData) {
-            updateObra(initialData.id, formData);
+            updateObra(initialData.id, finalData);
         } else {
             const newObra = {
-                ...formData,
+                ...finalData,
                 id: `ob-${Date.now()}`
             };
             saveObra(newObra);
@@ -51,8 +114,18 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        if (name.startsWith('tipologia')) {
+            handleTypologyChange(name, value);
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
+
+    const tTree = typologiesTree as any;
+    const subCategories = formData.tipologiaCat ? Object.keys(tTree[formData.tipologiaCat] || {}) : [];
+    const types = (formData.tipologiaCat && formData.tipologiaSub) ? (tTree[formData.tipologiaCat][formData.tipologiaSub] || []) : [];
+
+    const getPersonasByTipo = (tipo: string) => personas.filter(p => p.tipo === tipo);
 
     return (
         <div style={{
@@ -60,59 +133,142 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
             padding: '1rem'
         }}>
-            <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
                 <div className="card-header flex justify-between items-center">
                     <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{initialData ? 'Editar Obra' : 'Crear Nueva Obra'}</h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                    <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                         <X size={24} />
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit}>
-                    <div className="card-body" style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+                    <div className="card-body" style={{ display: 'grid', gap: '1.5rem' }}>
 
-                        <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                            <label className="input-label">Denominación</label>
-                            <input required name="denominacion" value={formData.denominacion} onChange={handleChange} className="input-field" placeholder="Ej. Construcción Hospital Norte" />
+                        {/* Tipología */}
+                        <div style={{ background: 'var(--background)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem', color: 'var(--text-muted)' }}>Tipología de la Obra</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                                <div className="input-group">
+                                    <label className="input-label">Categoría</label>
+                                    <select required name="tipologiaCat" value={formData.tipologiaCat} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="" disabled>Seleccionar...</option>
+                                        <option value="Edificación">Edificación</option>
+                                        <option value="Obra civil">Obra civil</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Subcategoría</label>
+                                    <select required name="tipologiaSub" value={formData.tipologiaSub} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaCat}>
+                                        <option value="" disabled>Seleccionar...</option>
+                                        {subCategories.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Tipo</label>
+                                    <select required name="tipologiaTipo" value={formData.tipologiaTipo} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaSub || types.length === 0}>
+                                        <option value="" disabled>{types.length === 0 ? 'No aplica' : 'Seleccionar...'}</option>
+                                        {types.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="input-group">
-                            <label className="input-label">Municipio</label>
-                            <input required name="municipio" value={formData.municipio} onChange={handleChange} className="input-field" placeholder="Ej. Madrid" />
+                        {/* Datos Generales */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                <label className="input-label">Denominación</label>
+                                <input required name="denominacion" value={formData.denominacion} onChange={handleChange} className="input-field" placeholder="Ej. Construcción Hospital Norte" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Municipio</label>
+                                <input required name="municipio" value={formData.municipio} onChange={handleChange} className="input-field" placeholder="Ej. Madrid" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Expediente</label>
+                                <input required name="expediente" value={formData.expediente} onChange={handleChange} className="input-field" placeholder="Ej. EXP-2023-01" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Código de Obra</label>
+                                <input required name="codigoObra" value={formData.codigoObra} onChange={handleChange} className="input-field" placeholder="Ej. OBR-MAD-001" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Estado</label>
+                                <select name="estado" value={formData.estado} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                    <option value="solicitud">Solicitud</option>
+                                    <option value="en curso">En Curso</option>
+                                    <option value="completada">Completada</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div className="input-group">
-                            <label className="input-label">Expediente</label>
-                            <input required name="expediente" value={formData.expediente} onChange={handleChange} className="input-field" placeholder="Ej. EXP-2023-01" />
+                        {/* Fechas */}
+                        <div style={{ background: 'var(--background)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                            <div className="input-group">
+                                <label className="input-label">Fecha Inicio</label>
+                                <input type="date" required name="fechaInicio" value={formData.fechaInicio} onChange={handleChange} className="input-field" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Cálculo Duración (Opcional)</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input type="number" min="1" name="duracionNum" value={formData.duracionNum} onChange={handleChange} className="input-field" placeholder="Ej. 6" style={{ width: '80px' }} />
+                                    <select name="duracionUnidad" value={formData.duracionUnidad} onChange={handleChange} className="input-field" style={{ flex: 1, backgroundColor: 'white', padding: '0 0.2rem' }}>
+                                        <option value="dias">Días</option>
+                                        <option value="meses">Meses</option>
+                                        <option value="años">Años</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Fecha Fin Estimada</label>
+                                <input type="date" required name="fechaFin" value={formData.fechaFin} onChange={handleChange} className="input-field" />
+                            </div>
                         </div>
 
-                        <div className="input-group">
-                            <label className="input-label">Código de Obra</label>
-                            <input required name="codigoObra" value={formData.codigoObra} onChange={handleChange} className="input-field" placeholder="Ej. OBR-MAD-001" />
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label">Estado</label>
-                            <select name="estado" value={formData.estado} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
-                                <option value="solicitud">Solicitud</option>
-                                <option value="en curso">En Curso</option>
-                                <option value="completada">Completada</option>
-                            </select>
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label">Fecha Inicio</label>
-                            <input type="date" required name="fechaInicio" value={formData.fechaInicio} onChange={handleChange} className="input-field" />
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label">Fecha Fin (Estimada)</label>
-                            <input type="date" required name="fechaFin" value={formData.fechaFin} onChange={handleChange} className="input-field" />
+                        {/* Agentes de la obra */}
+                        <div style={{ background: 'var(--background)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem', color: 'var(--text-muted)' }}>Agentes de la Obra</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div className="input-group">
+                                    <label className="input-label">Contratista</label>
+                                    <select name="contratistaId" value={formData.contratistaId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="">Ninguno</option>
+                                        {empresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Promotor</label>
+                                    <select name="promotorId" value={formData.promotorId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="">Ninguno</option>
+                                        {empresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Coordinador SyS</label>
+                                    <select name="coordinadorSysId" value={formData.coordinadorSysId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="">Ninguno</option>
+                                        {getPersonasByTipo('Coordinador SyS').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Director de obra</label>
+                                    <select name="directorObraId" value={formData.directorObraId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="">Ninguno</option>
+                                        {getPersonasByTipo('Director de obra').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">Jefe de obra</label>
+                                    <select name="jefeObraId" value={formData.jefeObraId} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                        <option value="">Ninguno</option>
+                                        {getPersonasByTipo('Jefe de obra').map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
                     </div>
 
-                    <div className="card-footer flex" style={{ justifyContent: 'flex-end', gap: '1rem' }}>
+                    <div className="card-footer flex" style={{ justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
                         <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
                         <Button type="submit">{initialData ? 'Guardar Cambios' : 'Guardar Obra'}</Button>
                     </div>
