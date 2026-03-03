@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { saveObra, updateObra, getEmpresas, getPersonas, typologiesTree } from '../store';
+import { saveObra, updateObra, getEmpresas, getPersonas, saveEmpresa, savePersona, typologiesTree } from '../store';
 import { Button } from './ui';
-import { X } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
+import { EmpresaModal, PersonaModal } from './ContactModals';
 
 interface CreateProjectModalProps {
     onClose: () => void;
@@ -9,7 +10,7 @@ interface CreateProjectModalProps {
     initialData?: any;
 }
 
-const MultiSelect = ({ options, value, onChange, placeholder }: any) => {
+const MultiSelect = ({ options, value, onChange, placeholder, onAddNew, addNewLabel }: any) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredOptions = options.filter((o: any) => o.label.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -46,13 +47,26 @@ const MultiSelect = ({ options, value, onChange, placeholder }: any) => {
                     </div>
                 )}
 
-                <input
-                    type="text"
-                    placeholder="Buscar agente..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.875rem', marginBottom: '0.5rem' }}
-                />
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <input
+                        type="text"
+                        placeholder="Buscar agente..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        style={{ flex: 1, padding: '0.35rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.875rem' }}
+                    />
+                    {onAddNew && (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); onAddNew(); }}
+                            className="btn-icon"
+                            title={addNewLabel || "Añadir nuevo"}
+                            style={{ padding: '0.35rem', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary-dark)', borderRadius: '4px' }}
+                        >
+                            <Plus size={16} />
+                        </button>
+                    )}
+                </div>
 
                 <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                     {filteredOptions.length === 0 ? (
@@ -82,6 +96,9 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
     const [empresas, setEmpresas] = useState<any[]>([]);
     const [personas, setPersonas] = useState<any[]>([]);
 
+    // Quick Add Agent State
+    const [quickAddType, setQuickAddType] = useState<{ type: 'empresa' | 'persona', field: string } | null>(null);
+
     const [formData, setFormData] = useState({
         tipologiaCat: '',
         tipologiaSub: '',
@@ -89,6 +106,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
         denominacion: '',
         municipio: '',
         expediente: '',
+        cebe: '',
         codigoObra: '',
         estado: 'solicitud',
         fechaInicio: '',
@@ -114,6 +132,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                 denominacion: initialData.denominacion || '',
                 municipio: initialData.municipio || '',
                 expediente: initialData.expediente || '',
+                cebe: initialData.cebe || '',
                 codigoObra: initialData.codigoObra || '',
                 estado: initialData.estado || 'solicitud',
                 fechaInicio: initialData.fechaInicio || '',
@@ -181,6 +200,32 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
         onCreated();
     };
 
+    const handleQuickAddPersona = (data: any) => {
+        const newId = `per-${Date.now()}`;
+        savePersona({ id: newId, ...data });
+        setPersonas(getPersonas());
+        if (quickAddType) {
+            setFormData(prev => ({
+                ...prev,
+                [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newId]
+            }));
+        }
+        setQuickAddType(null);
+    };
+
+    const handleQuickAddEmpresa = (data: any) => {
+        const newId = `emp-${Date.now()}`;
+        saveEmpresa({ id: newId, ...data });
+        setEmpresas(getEmpresas());
+        if (quickAddType) {
+            setFormData(prev => ({
+                ...prev,
+                [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newId]
+            }));
+        }
+        setQuickAddType(null);
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         if (name.startsWith('tipologia')) {
@@ -219,7 +264,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
                                 <div className="input-group">
                                     <label className="input-label">Categoría</label>
-                                    <select required name="tipologiaCat" value={formData.tipologiaCat} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
+                                    <select name="tipologiaCat" value={formData.tipologiaCat} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }}>
                                         <option value="" disabled>Seleccionar...</option>
                                         <option value="Edificación">Edificación</option>
                                         <option value="Obra civil">Obra civil</option>
@@ -227,14 +272,14 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Subcategoría</label>
-                                    <select required name="tipologiaSub" value={formData.tipologiaSub} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaCat}>
+                                    <select name="tipologiaSub" value={formData.tipologiaSub} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaCat}>
                                         <option value="" disabled>Seleccionar...</option>
                                         {subCategories.map(sc => <option key={sc} value={sc}>{sc}</option>)}
                                     </select>
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Tipo</label>
-                                    <select required name="tipologiaTipo" value={formData.tipologiaTipo} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaSub || types.length === 0}>
+                                    <select name="tipologiaTipo" value={formData.tipologiaTipo} onChange={handleChange} className="input-field" style={{ backgroundColor: 'white' }} disabled={!formData.tipologiaSub || types.length === 0}>
                                         <option value="" disabled>{types.length === 0 ? 'No aplica' : 'Seleccionar...'}</option>
                                         {types.map((t: string) => <option key={t} value={t}>{t}</option>)}
                                     </select>
@@ -255,6 +300,10 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                             <div className="input-group">
                                 <label className="input-label">Expediente</label>
                                 <input required name="expediente" value={formData.expediente} onChange={handleChange} className="input-field" placeholder="Ej. EXP-2023-01" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">CEBE</label>
+                                <input name="cebe" value={formData.cebe} onChange={handleChange} className="input-field" placeholder="Ej. CEBE-001" style={{ backgroundColor: 'white' }} />
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Código de Obra</label>
@@ -298,48 +347,53 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                             <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem', color: 'var(--text-muted)' }}>Agentes de la Obra</h3>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div className="input-group">
-                                    <label className="input-label">Contratista</label>
+                                    <label className="input-label">Contratista (Empresa)</label>
                                     <MultiSelect
                                         options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
                                         value={formData.contratistaId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, contratistaId: val }))}
                                         placeholder="Seleccionar..."
+                                        onAddNew={() => setQuickAddType({ type: 'empresa', field: 'contratistaId' })}
                                     />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Promotor</label>
+                                    <label className="input-label">Promotor (Empresa)</label>
                                     <MultiSelect
                                         options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
                                         value={formData.promotorId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, promotorId: val }))}
                                         placeholder="Seleccionar..."
+                                        onAddNew={() => setQuickAddType({ type: 'empresa', field: 'promotorId' })}
                                     />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Coordinador SyS</label>
+                                    <label className="input-label">Coordinador SyS (Persona)</label>
                                     <MultiSelect
                                         options={getPersonasByTipo('Coordinador SyS').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
                                         value={formData.coordinadorSysId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, coordinadorSysId: val }))}
                                         placeholder="Seleccionar..."
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'coordinadorSysId' })}
                                     />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Director de obra</label>
+                                    <label className="input-label">Director de obra (Persona)</label>
                                     <MultiSelect
                                         options={getPersonasByTipo('Director de obra').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
                                         value={formData.directorObraId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, directorObraId: val }))}
                                         placeholder="Seleccionar..."
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'directorObraId' })}
                                     />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Jefe de obra</label>
+                                    <label className="input-label">Jefe de obra (Persona)</label>
                                     <MultiSelect
                                         options={getPersonasByTipo('Jefe de obra').map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
                                         value={formData.jefeObraId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, jefeObraId: val }))}
                                         placeholder="Seleccionar..."
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'jefeObraId' })}
                                     />
                                 </div>
                             </div>
@@ -353,6 +407,21 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                     </div>
                 </form>
             </div>
+
+            {/* Quick Add Agent Modal */}
+            {quickAddType && quickAddType.type === 'empresa' && (
+                <EmpresaModal
+                    onClose={() => setQuickAddType(null)}
+                    onSave={handleQuickAddEmpresa}
+                />
+            )}
+            {quickAddType && quickAddType.type === 'persona' && (
+                <PersonaModal
+                    empresas={empresas}
+                    onClose={() => setQuickAddType(null)}
+                    onSave={handleQuickAddPersona}
+                />
+            )}
         </div>
     );
 }

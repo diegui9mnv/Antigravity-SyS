@@ -258,23 +258,46 @@ a:hover {
   padding: 0.125rem 0.625rem;
   border-radius: var(--radius-full);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: capitalize;
+  border: 1px solid transparent;
+  background-color: #f3f4f6;
+  /* Fallback gray */
+  color: #374151;
 }
 
 .badge-solicitud {
   background-color: rgba(245, 158, 11, 0.1);
   color: var(--status-solicitud);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .badge-en-curso {
   background-color: rgba(59, 130, 246, 0.1);
   color: var(--status-curso);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
-.badge-completada {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: var(--status-completada);
+.badge-planificada,
+.badge-pendiente {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #bae6fd !important;
+}
+
+.badge-realizada,
+.badge-completada,
+.badge-completado {
+  background-color: #dcfce7 !important;
+  color: #15803d !important;
+  border-color: #bbf7d0 !important;
+}
+
+.badge-cancelada,
+.badge-cancelado {
+  background-color: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
 }
 
 /* Layout */

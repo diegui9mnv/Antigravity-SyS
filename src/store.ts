@@ -8,6 +8,7 @@ export const mockObras = [
     codigoObra: "OBR-MAD-001",
     fechaInicio: "2023-05-10",
     fechaFin: "2024-05-10",
+    cebe: "CEBE-001"
   },
   {
     id: "ob-002",
@@ -18,6 +19,7 @@ export const mockObras = [
     codigoObra: "OBR-ZAR-045",
     fechaInicio: "2024-01-15",
     fechaFin: "2025-06-30",
+    cebe: "CEBE-002"
   },
   {
     id: "ob-003",
@@ -28,6 +30,7 @@ export const mockObras = [
     codigoObra: "OBR-BCN-088",
     fechaInicio: "2022-03-01",
     fechaFin: "2023-02-28",
+    cebe: "CEBE-003"
   }
 ];
 
@@ -177,6 +180,11 @@ export const mockPersonas = [
   { id: "per-002", nombre: "María", apellidos: "García", tipo: "Coordinador SyS", empresaId: "emp-002" }
 ];
 
+export const mockUsuarios = [
+  { id: "usr-001", nombre: "Admin CEMOSA", email: "admin@cemosa.es", tipo: "CEMOSA" },
+  { id: "usr-002", nombre: "Juan Externo", email: "juan@abc.com", tipo: "Externo", empresaId: "emp-001" }
+];
+
 export const fileStructureTemplate = [
   {
     id: "doc-reg",
@@ -251,6 +259,22 @@ export const fileStructureTemplate = [
     name: "PSS/DGP",
     type: "folder",
     children: [
+      {
+        id: "pss-anexos",
+        name: "PSS/DGP y Anexos",
+        type: "folder",
+        children: [
+          { id: "cat-pss-anexos", name: "PSS/DGP y Anexos", type: "category" }
+        ]
+      },
+      {
+        id: "acta-aprobacion",
+        name: "Acta de aprobación",
+        type: "folder",
+        children: [
+          { id: "cat-acta-aprobacion", name: "Acta de aprobación", type: "category" }
+        ]
+      },
       {
         id: "informes",
         name: "Informes",
@@ -407,6 +431,33 @@ export const updatePersona = (id: string, updatedData: any) => {
 export const deletePersona = (id: string) => {
   const personas = getPersonas().filter((p: any) => p.id !== id);
   localStorage.setItem('personas', JSON.stringify(personas));
+};
+
+export const getUsuarios = () => {
+  const str = localStorage.getItem('usuarios');
+  if (!str) {
+    localStorage.setItem('usuarios', JSON.stringify(mockUsuarios));
+    return mockUsuarios;
+  }
+  return JSON.parse(str);
+};
+export const getUsuario = (id: string) => getUsuarios().find((u: any) => u.id === id);
+export const saveUsuario = (usuario: any) => {
+  const usuarios = getUsuarios();
+  usuarios.push(usuario);
+  localStorage.setItem('usuarios', JSON.stringify(usuarios));
+};
+export const updateUsuario = (id: string, updatedData: any) => {
+  const usuarios = getUsuarios();
+  const index = usuarios.findIndex((u: any) => u.id === id);
+  if (index !== -1) {
+    usuarios[index] = { ...usuarios[index], ...updatedData };
+    localStorage.setItem('usuarios', JSON.stringify(usuarios));
+  }
+};
+export const deleteUsuario = (id: string) => {
+  const usuarios = getUsuarios().filter((u: any) => u.id !== id);
+  localStorage.setItem('usuarios', JSON.stringify(usuarios));
 };
 
 export const getContactosBase = () => {

@@ -40,6 +40,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         accidentes: eventData.accidentes || '',
         fotos: eventData.fotos || [], // Array of base64 images
         firmas: eventData.firmas || [], // Array of signature objects { id, nombre, empresa, fecha, url }
+        adjuntos: eventData.adjuntos || [], // Array of files attached
     });
 
     // Signature Pad State
@@ -78,7 +79,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         }
     };
 
-    const onDrop = (acceptedFiles: File[]) => {
+    const onDropFotos = (acceptedFiles: File[]) => {
         if (acceptedFiles && acceptedFiles.length > 0) {
             acceptedFiles.forEach(file => {
                 const reader = new FileReader();
@@ -94,12 +95,43 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         }
     };
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'image/*': [] } });
+    const { getRootProps: getRootPropsFotos, getInputProps: getInputPropsFotos, isDragActive: isDragActiveFotos } = useDropzone({ onDrop: onDropFotos, accept: { 'image/*': [] } });
 
     const handleRemovePhoto = (photoId: number) => {
         setFormData((prev: any) => ({
             ...prev,
             fotos: prev.fotos.filter((p: any) => p.id !== photoId)
+        }));
+    };
+
+    const onDropAdjuntos = (acceptedFiles: File[]) => {
+        if (acceptedFiles && acceptedFiles.length > 0) {
+            // Store file references or process as needed. For now, assuming base64 storage for simplicity in the demo.
+            acceptedFiles.forEach(file => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setFormData((prev: any) => ({
+                        ...prev,
+                        adjuntos: [...(prev.adjuntos || []), {
+                            id: Date.now() + Math.random(),
+                            name: file.name,
+                            size: file.size,
+                            type: file.type,
+                            dataUrl: reader.result as string
+                        }]
+                    }));
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+    };
+
+    const { getRootProps: getRootPropsAdjuntos, getInputProps: getInputPropsAdjuntos, isDragActive: isDragActiveAdjuntos } = useDropzone({ onDrop: onDropAdjuntos });
+
+    const handleRemoveAdjunto = (adjuntoId: number) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            adjuntos: prev.adjuntos.filter((a: any) => a.id !== adjuntoId)
         }));
     };
 
@@ -196,31 +228,31 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1rem' }}>
             {/* Header Sticky Bar */}
             <div style={{
-                position: 'sticky', top: 0, zIndex: 10,
-                backgroundColor: 'var(--color-background)',
-                padding: '1rem', borderBottom: '1px solid var(--border-color)',
+                position: 'sticky', top: 0, zIndex: 50,
+                backgroundColor: 'rgba(255,255,255,0.95)',
+                backdropFilter: 'blur(8px)',
+                padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 boxShadow: 'var(--shadow-sm)',
                 borderRadius: '8px',
-                margin: '-1rem -1rem 1rem -1rem' // Compensate for parent padding if any
+                marginBottom: '1rem'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button onClick={onClose} className="btn-icon">
-                        <ArrowLeft size={20} />
+                    <button onClick={onClose} className="btn-icon" style={{ padding: '0.25rem' }}>
+                        <ArrowLeft size={18} />
                     </button>
                     <div>
-                        <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--color-primary-dark)' }}>
-                            Informe de {tipo.charAt(0).toUpperCase() + tipo.slice(1)}: {eventData.title}
+                        <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-primary-dark)', fontWeight: 600 }}>
+                            Informe: {eventData.title}
                         </h2>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Obra: {obra.nombre}</span>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                    <Button onClick={handleSave} style={{ gap: '0.5rem' }}>
+                    <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
+                    <Button onClick={handleSave} size="sm" style={{ gap: '0.5rem' }}>
                         <Save size={16} /> Guardar Informe
                     </Button>
                 </div>
@@ -354,22 +386,22 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                         </CardHeader>
                         <CardBody>
                             <div
-                                {...getRootProps()}
+                                {...getRootPropsFotos()}
                                 style={{
-                                    border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                    border: `2px dashed ${isDragActiveFotos ? 'var(--color-primary)' : 'var(--border-color)'}`,
                                     borderRadius: 'var(--radius-lg)',
                                     padding: '2rem',
                                     textAlign: 'center',
-                                    backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                    backgroundColor: isDragActiveFotos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
                                     cursor: 'pointer',
                                     transition: 'all var(--transition-fast)',
                                     marginBottom: formData.fotos && formData.fotos.length > 0 ? '1rem' : '0'
                                 }}
                             >
-                                <input {...getInputProps()} />
-                                <UploadCloud size={32} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                                <input {...getInputPropsFotos()} />
+                                <UploadCloud size={32} style={{ color: isDragActiveFotos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
                                 <p style={{ margin: 0, fontSize: '0.875rem' }}>
-                                    {isDragActive ? "Suelta las imágenes aquí..." : "Arrastra imágenes o haz clic para subir"}
+                                    {isDragActiveFotos ? "Suelta las imágenes aquí..." : "Arrastra imágenes o haz clic para subir"}
                                 </p>
                             </div>
 
@@ -468,6 +500,54 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                     )
                                 )}
                             </div>
+                        </CardBody>
+                    </Card>
+
+                    <Card>
+                        <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Archivos Adjuntos</h3>
+                        </CardHeader>
+                        <CardBody>
+                            <div
+                                {...getRootPropsAdjuntos()}
+                                style={{
+                                    border: `2px dashed ${isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                    borderRadius: 'var(--radius-lg)',
+                                    padding: '2rem',
+                                    textAlign: 'center',
+                                    backgroundColor: isDragActiveAdjuntos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                    cursor: 'pointer',
+                                    transition: 'all var(--transition-fast)',
+                                    marginBottom: formData.adjuntos && formData.adjuntos.length > 0 ? '1rem' : '0'
+                                }}
+                            >
+                                <input {...getInputPropsAdjuntos()} />
+                                <UploadCloud size={32} style={{ color: isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                                <p style={{ margin: 0, fontSize: '0.875rem' }}>
+                                    {isDragActiveAdjuntos ? "Suelta los archivos aquí..." : "Arrastra documentos adicionales o haz clic"}
+                                </p>
+                            </div>
+
+                            {formData.adjuntos && formData.adjuntos.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {formData.adjuntos.map((file: any) => (
+                                        <div key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
+                                                <div style={{ padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                                    <UploadCloud size={16} style={{ color: 'var(--text-muted)' }} />
+                                                </div>
+                                                <div style={{ overflow: 'hidden' }}>
+                                                    <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>{file.name}</p>
+                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => handleRemoveAdjunto(file.id)} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar archivo">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </CardBody>
                     </Card>
 

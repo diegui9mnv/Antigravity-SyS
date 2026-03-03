@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardBody, CardFooter, Button } from './ui';
 import { X } from 'lucide-react';
 
@@ -10,15 +10,30 @@ interface EventModalProps {
     formatAgentName: (id: string, type: 'empresa' | 'persona') => string;
     onClose: () => void;
     onSave: (data: any) => void;
+    initialData?: any;
+    defaultTitle?: string;
 }
 
-export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assignedContacts, formatAgentName, onClose, onSave }) => {
+export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assignedContacts, formatAgentName, onClose, onSave, initialData, defaultTitle }) => {
     if (!isOpen) return null;
-    const [start, setStart] = useState('');
-    const [end, setEnd] = useState('');
-    const [frecuencia, setFrecuencia] = useState('puntual');
-    const [estado, setEstado] = useState('Planificada');
-    const [coordinadorId, setCoordinadorId] = useState('');
+
+    // Auto-generate title index (this is simplified as we don't have the list here, but could be passed if needed)
+    // For now we'll just set a generic editable default
+    const [title, setTitle] = useState(initialData?.title || defaultTitle || `Acta ${tipo} 001`);
+    const [start, setStart] = useState(initialData?.start || obra?.fechaInicio || '');
+    const [end, setEnd] = useState(initialData?.end || obra?.fechaFin || '');
+    const [estado, setEstado] = useState(initialData?.estado || 'Planificada');
+    const [coordinadorId, setCoordinadorId] = useState(initialData?.coordinadorId || '');
+
+    useEffect(() => {
+        if (isOpen) {
+            setTitle(initialData?.title || defaultTitle || `Acta ${tipo} 001`);
+            setStart(initialData?.start || obra?.fechaInicio || '');
+            setEnd(initialData?.end || obra?.fechaFin || '');
+            setEstado(initialData?.estado || 'Planificada');
+            setCoordinadorId(initialData?.coordinadorId || '');
+        }
+    }, [initialData, defaultTitle, tipo, obra, isOpen]);
 
     const handleSave = () => {
         if (!start || !end) {
@@ -26,8 +41,10 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             return;
         }
         onSave({
-            start, end, frecuencia, estado, coordinadorId
+            title, start, end, estado, coordinadorId
         });
+        // reset state after save if opening again isn't unmounting
+        setTitle(defaultTitle || `Acta ${tipo} 001`);
     };
 
     return (
@@ -52,52 +69,52 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
                         <div className="input-group">
-                            <label className="input-label">Inicio *</label>
+                            <label className="input-label">Título *</label>
                             <input
-                                type="datetime-local"
-                                value={start}
+                                type="text"
+                                value={title}
+                                onChange={e => setTitle(e.target.value)}
+                                className="input-field"
+                                required
+                            />
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-label">Fecha planificada *</label>
+                            <input
+                                type="date"
+                                value={start ? start.split('T')[0] : ''} // ensuring date format
                                 onChange={e => setStart(e.target.value)}
                                 className="input-field"
+                                required
                             />
                         </div>
 
                         <div className="input-group">
-                            <label className="input-label">Fin *</label>
+                            <label className="input-label">Fecha fin *</label>
                             <input
-                                type="datetime-local"
-                                value={end}
+                                type="date"
+                                value={end ? end.split('T')[0] : ''} // ensuring date format
                                 onChange={e => setEnd(e.target.value)}
                                 className="input-field"
+                                required
                             />
                         </div>
 
-                        <div className="input-group">
-                            <label className="input-label">Frecuencia</label>
-                            <select
-                                value={frecuencia}
-                                onChange={e => setFrecuencia(e.target.value)}
-                                className="input-field"
-                            >
-                                <option value="puntual">Puntual</option>
-                                <option value="semanal">Semanal</option>
-                                <option value="quincenal">Quincenal</option>
-                                <option value="mensual">Mensual</option>
-                                <option value="trimestral">Trimestral</option>
-                            </select>
-                        </div>
-
-                        <div className="input-group">
-                            <label className="input-label">Estado</label>
-                            <select
-                                value={estado}
-                                onChange={e => setEstado(e.target.value)}
-                                className="input-field"
-                            >
-                                <option value="Planificada">Planificada</option>
-                                <option value="Realizada">Realizada</option>
-                                <option value="Cancelada">Cancelada</option>
-                            </select>
-                        </div>
+                        {initialData && (
+                            <div className="input-group">
+                                <label className="input-label">Estado</label>
+                                <select
+                                    value={estado}
+                                    onChange={e => setEstado(e.target.value)}
+                                    className="input-field"
+                                >
+                                    <option value="Planificada">Planificada</option>
+                                    <option value="Realizada">Realizada</option>
+                                    <option value="Cancelada">Cancelada</option>
+                                </select>
+                            </div>
+                        )}
 
                         <div className="input-group">
                             <label className="input-label">Coordinador SyS</label>

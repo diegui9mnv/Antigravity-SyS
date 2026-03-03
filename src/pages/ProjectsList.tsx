@@ -15,6 +15,7 @@ export default function ProjectsList() {
         denominacion: '',
         municipio: '',
         expediente: '',
+        cebe: '',
         estado: ''
     });
 
@@ -57,6 +58,7 @@ export default function ProjectsList() {
             obra.denominacion.toLowerCase().includes(filters.denominacion.toLowerCase()) &&
             obra.municipio.toLowerCase().includes(filters.municipio.toLowerCase()) &&
             obra.expediente.toLowerCase().includes(filters.expediente.toLowerCase()) &&
+            (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase()) &&
             (filters.estado === '' || obra.estado === filters.estado)
         );
     });
@@ -92,6 +94,10 @@ export default function ProjectsList() {
                         <label className="input-label">Expediente</label>
                         <input name="expediente" value={filters.expediente} onChange={handleFilterChange} className="input-field" placeholder="Ej. EXP-..." style={{ width: '100%' }} />
                     </div>
+                    <div className="input-group" style={{ flex: '1 1 100px', marginBottom: 0 }}>
+                        <label className="input-label">CEBE</label>
+                        <input name="cebe" value={filters.cebe} onChange={handleFilterChange} className="input-field" placeholder="Filtrar CEBE..." style={{ width: '100%' }} />
+                    </div>
                     <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
                         <label className="input-label">Estado</label>
                         <select name="estado" value={filters.estado} onChange={handleFilterChange} className="input-field" style={{ backgroundColor: 'white', width: '100%' }}>
@@ -111,7 +117,7 @@ export default function ProjectsList() {
                         <tr>
                             <th>Denominación</th>
                             <th>Municipio</th>
-                            <th>Expediente</th>
+                            <th>Exp./CEBE</th>
                             <th>Código</th>
                             <th>Estado</th>
                             <th>Fechas</th>
@@ -124,7 +130,10 @@ export default function ProjectsList() {
                                 <tr key={obra.id} onClick={() => navigate(`/obra/${obra.id}`)} style={{ cursor: 'pointer' }}>
                                     <td style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>{obra.denominacion}</td>
                                     <td>{obra.municipio}</td>
-                                    <td>{obra.expediente}</td>
+                                    <td>
+                                        <div>{obra.expediente}</div>
+                                        {obra.cebe && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CEBE: {obra.cebe}</div>}
+                                    </td>
                                     <td><span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{obra.codigoObra}</span></td>
                                     <td><Badge status={obra.estado}>{obra.estado}</Badge></td>
                                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>

@@ -1,10 +1,7 @@
 import type { ReactNode } from 'react';
 
-export const Badge = ({ children, status }: { children: ReactNode, status?: string }) => {
-    let statusClass = '';
-    if (status) {
-        statusClass = `badge-${status.replace(/\s+/g, '-').toLowerCase()}`;
-    }
+export const Badge = ({ children, status = 'default' }: { children: ReactNode, status?: string }) => {
+    const statusClass = `badge-${status.replace(/\s+/g, '-').toLowerCase()}`;
     return <span className={`badge ${statusClass}`}>{children}</span>;
 };
 
