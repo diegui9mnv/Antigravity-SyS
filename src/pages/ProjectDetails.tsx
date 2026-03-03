@@ -295,11 +295,6 @@ export default function ProjectDetails() {
                     <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
                         <ArrowLeft size={16} /> Volver a Obras
                     </Link>
-                    {!isSidebarOpen && (
-                        <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(true)} style={{ display: 'flex', gap: '0.5rem' }}>
-                            <Menu size={16} /> Mostrar Árbol
-                        </Button>
-                    )}
                 </div>
 
                 <div className="flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
@@ -323,11 +318,11 @@ export default function ProjectDetails() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isSidebarOpen ? 'minmax(280px, 1fr) 3fr' : '1fr', gap: '2rem', height: 'calc(100vh - 220px)', minHeight: '600px', transition: 'all 0.3s ease' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isSidebarOpen ? 'minmax(280px, 1fr) 3fr' : 'auto 1fr', gap: '2rem', height: 'calc(100vh - 220px)', minHeight: '600px', transition: 'grid-template-columns 0.3s ease' }}>
                     {/* Document Tree Sidebar */}
-                    {isSidebarOpen && (
-                        <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <div className="card-header flex justify-between items-center" style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                    <Card style={{ height: '100%', display: 'flex', flexDirection: 'column', width: isSidebarOpen ? 'auto' : 'fit-content' }}>
+                        <div className={`flex ${isSidebarOpen ? 'justify-between' : 'justify-center'} items-center`} style={{ padding: '1rem', paddingBottom: '0.5rem', borderBottom: isSidebarOpen ? '1px solid var(--border-color)' : 'none' }}>
+                            {isSidebarOpen && (
                                 <button
                                     onClick={() => {
                                         setActiveCategory(null);
@@ -345,10 +340,28 @@ export default function ProjectDetails() {
                                 >
                                     <Folders size={18} /> Árbol Documental
                                 </button>
-                                <button className="btn-icon" onClick={() => setIsSidebarOpen(false)} title="Ocultar panel">
-                                    <Menu size={18} />
-                                </button>
-                            </div>
+                            )}
+                            <button
+                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                title={isSidebarOpen ? "Ocultar panel" : "Mostrar panel"}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '0.5rem',
+                                    borderRadius: '0.375rem',
+                                    backgroundColor: 'transparent',
+                                    color: 'var(--text-main)',
+                                    border: '1px solid transparent',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                }}
+                                className="hover:bg-surface-hover hover:border-border"
+                            >
+                                <Menu size={20} />
+                            </button>
+                        </div>
+                        {isSidebarOpen && (
                             <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0' }}>
                                 {fileStructureTemplate.map((node) => (
                                     <DocumentTreeNode
@@ -361,8 +374,8 @@ export default function ProjectDetails() {
                                     />
                                 ))}
                             </div>
-                        </Card>
-                    )}
+                        )}
+                    </Card>
 
                     {/* Content Area */}
                     <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
