@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Mail, Building2, Plus, Edit3, Trash2 } from 'lucide-react';
+import { Users, Mail, Building2, Plus, Edit2, Trash2 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
 import { getUsuarios, saveUsuario, updateUsuario, deleteUsuario, getEmpresas, saveEmpresa, getEmpresa } from '../store';
 import { EmpresaModal } from '../components/ContactModals';
@@ -127,10 +127,10 @@ export default function UsersList() {
                                     </td>
                                     <td style={{ textAlign: 'center' }}>
                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                            <button onClick={() => handleEdit(u)} className="btn-icon text-primary hover:bg-blue-50" title="Editar">
-                                                <Edit3 size={18} />
+                                            <button onClick={() => handleEdit(u)} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
+                                                <Edit2 size={18} />
                                             </button>
-                                            <button onClick={() => handleDelete(u.id)} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar">
+                                            <button onClick={() => handleDelete(u.id)} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>

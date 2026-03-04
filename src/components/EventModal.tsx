@@ -24,6 +24,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
     const [end, setEnd] = useState(initialData?.end || obra?.fechaFin || '');
     const [estado, setEstado] = useState(initialData?.estado || 'Planificada');
     const [coordinadorId, setCoordinadorId] = useState(initialData?.coordinadorId || '');
+    const [frecuencia, setFrecuencia] = useState(initialData?.frecuencia || 'Puntual');
 
     useEffect(() => {
         if (isOpen) {
@@ -32,6 +33,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             setEnd(initialData?.end || obra?.fechaFin || '');
             setEstado(initialData?.estado || 'Planificada');
             setCoordinadorId(initialData?.coordinadorId || '');
+            setFrecuencia(initialData?.frecuencia || 'Puntual');
         }
     }, [initialData, defaultTitle, tipo, obra, isOpen]);
 
@@ -41,7 +43,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             return;
         }
         onSave({
-            title, start, end, estado, coordinadorId
+            title, start, end, estado, coordinadorId, frecuencia
         });
         // reset state after save if opening again isn't unmounting
         setTitle(defaultTitle || `Acta ${tipo} 001`);
@@ -101,6 +103,20 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
                             />
                         </div>
 
+                        <div className="input-group">
+                            <label className="input-label">Frecuencia</label>
+                            <select
+                                value={frecuencia}
+                                onChange={e => setFrecuencia(e.target.value)}
+                                className="input-field"
+                            >
+                                <option value="Inicial">Inicial</option>
+                                <option value="Puntual">Puntual</option>
+                                <option value="Semanal">Semanal</option>
+                                <option value="Trimestral">Trimestral</option>
+                            </select>
+                        </div>
+
                         {initialData && (
                             <div className="input-group">
                                 <label className="input-label">Estado</label>
@@ -122,11 +138,21 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
                                 value={coordinadorId}
                                 onChange={e => setCoordinadorId(e.target.value)}
                                 className="input-field"
+                                style={{ backgroundColor: 'white' }}
                             >
                                 <option value="">Ninguno</option>
-                                {obra.coordinadorSysId && <option value={obra.coordinadorSysId}>{formatAgentName(obra.coordinadorSysId, 'persona')} (Principal)</option>}
-                                {assignedContacts.filter((c: any) => c.tipo === 'persona' && c.id !== obra.coordinadorSysId).map((c: any) => (
-                                    <option key={c.id} value={c.id}>{formatAgentName(c.id, 'persona')}</option>
+
+                                {/* Main Coordinators (from common obra fields) */}
+                                {(Array.isArray(obra.coordinadorSysId) ? obra.coordinadorSysId : [obra.coordinadorSysId]).filter(Boolean).map((id: string) => (
+                                    <option key={id} value={id}>{formatAgentName(id, 'persona')} (Principal)</option>
+                                ))}
+
+                                {/* Additional Coordinators (from assigned contacts with role 'Coordinador' or type persona) */}
+                                {assignedContacts.filter((c: any) =>
+                                    c.type === 'persona' &&
+                                    !(Array.isArray(obra.coordinadorSysId) ? obra.coordinadorSysId : [obra.coordinadorSysId]).includes(c.agentId)
+                                ).map((c: any) => (
+                                    <option key={c.agentId} value={c.agentId}>{formatAgentName(c.agentId, 'persona')}</option>
                                 ))}
                             </select>
                         </div>

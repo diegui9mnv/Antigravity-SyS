@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardBody, Button } from './ui';
-import { ArrowLeft, Save, UploadCloud, Trash2, Camera, PenTool, Plus } from 'lucide-react';
+import { ArrowLeft, Save, UploadCloud, Trash2, Camera, PenTool, Plus, FileText, Loader2, ExternalLink } from 'lucide-react';
 import { getLibroSubcontratas } from '../store';
 import { useDropzone } from 'react-dropzone';
 
@@ -41,6 +41,22 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         fotos: eventData.fotos || [], // Array of base64 images
         firmas: eventData.firmas || [], // Array of signature objects { id, nombre, empresa, fecha, url }
         adjuntos: eventData.adjuntos || [], // Array of files attached
+
+        // New Reunion fields
+        introduccion: eventData.introduccion || '',
+        asistentes: eventData.asistentes || '',
+        esReunionPuntual: eventData.esReunionPuntual || false,
+        ordenDelDia: eventData.ordenDelDia || `- Lectura del acta o conclusiones de la reunión anterior
+- Situación de la documentación que debe aportarse por las empresas implicadas en la obra.
+- Accidentes e incidentes ocurridos en la obra desde la reunión anterior.
+- Planificación de trabajos para el próximo período. Detectar contradicciones, interferencias e incompatibilidades entre empresas y medidas a adoptar.
+- Principales incidencias detectadas desde la última reunión.
+- Equipos de trabajo (medios auxiliares, máquinas, herramientas y otros equipos).
+- Medidas preventivas, protecciones colectivas e individuales, normas de seguridad y métodos de trabajo, conforme al Plan de Seguridad y Salud.
+- Actualizaciones del Plan de Seguridad y Salud.
+- Se enviará copia mediante correo electrónico a la Dirección Facultativa y a la contratista para que la reenvíen a las subcontratas que en el momento de la reunión intervienen en obra.
+- Fecha celebración de la próxima reunión.
+- Ruegos y preguntas`,
     });
 
     // Signature Pad State
@@ -48,6 +64,116 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
     const [isSigning, setIsSigning] = useState(false);
     const [showSignaturePad, setShowSignaturePad] = useState(false);
     const [currentSigner, setCurrentSigner] = useState({ nombre: '', empresa: '' });
+
+    // PDF Generation State
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
+
+    const handleGeneratePdf = () => {
+        setIsGeneratingPdf(true);
+        setGeneratedPdfUrl(null);
+        // Simulate network delay for PDF generation
+        setTimeout(() => {
+            // HTML content to simulate the PDF based on formData
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Acta ${eventData.title}</title>
+                    <style>
+                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
+                        .header { text-align: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }
+                        h1 { color: #1e3a8a; margin: 0; }
+                        h2 { color: #2563eb; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-top: 30px; }
+                        p { margin: 5px 0; }
+                        .section { margin-bottom: 20px; }
+                        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+                        .label { font-weight: bold; color: #4b5563; }
+                        .signatures { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 40px; }
+                        .signature-box { border: 1px solid #d1d5db; padding: 15px; text-align: center; border-radius: 8px; }
+                        .signature-img { max-width: 150px; max-height: 80px; margin-top: 10px; }
+                        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 8rem; color: rgba(0,0,0,0.05); z-index: -1; pointer-events: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="watermark">ACTA SIMULADA</div>
+                    <div class="header">
+                        <h1>Acta de ${tipo === 'reunion' ? 'Reunión' : 'Visita'}</h1>
+                        <p style="color: #6b7280; font-size: 1.2rem;">${obra.denominacion}</p>
+                    </div>
+
+                    ${tipo === 'reunion' ? `
+                    <div class="section">
+                        <h2>Introducción</h2>
+                        <p>${formData.introduccion?.replace(/\\n/g, '<br>') || 'No especificada.'}</p>
+                    </div>
+                    <div class="section">
+                        <h2>Asistentes</h2>
+                        <p>${formData.asistentes?.replace(/\\n/g, '<br>') || 'No especificados.'}</p>
+                    </div>
+                    <div class="section">
+                        <h2>Desarrollo de la reunión</h2>
+                        <p>${formData.desarrolloReunion?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
+                    </div>
+                    ${!formData.esReunionPuntual ? `
+                    <div class="section">
+                        <h2>Orden del Día</h2>
+                        <p>${formData.ordenDelDia?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
+                    </div>
+                    ` : ''}
+                    ` : `
+                    <div class="grid">
+                        <div class="section">
+                            <p><span class="label">Expediente:</span> ${obra.expediente || '-'}</p>
+                            <p><span class="label">Fecha y Hora:</span> ${formData.fechaHora || '-'}</p>
+                            <p><span class="label">Ubicación:</span> ${formData.ubicacion || '-'}</p>
+                        </div>
+                        <div class="section">
+                            <p><span class="label">Tipo de Obra:</span> ${formData.tipoObra || '-'}</p>
+                            <p><span class="label">Recurso Preventivo:</span> ${formData.recursoPreventivo || '-'}</p>
+                            <p><span class="label">Nº Trabajadores (aprox):</span> ${formData.nTrabajadores || '-'}</p>
+                        </div>
+                    </div>
+
+                    <div class="section">
+                        <h2>Trabajos en Curso</h2>
+                        <p>${formData.trabajosEnCurso?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
+                    </div>
+
+                    <div class="section">
+                        <h2>Subcontratas / Autónomos</h2>
+                        <p>${formData.subcontratas?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
+                    </div>
+
+                    <div class="section">
+                        <h2>Observaciones y Medidas</h2>
+                        <p>${formData.observaciones?.replace(/\\n/g, '<br>') || 'No hay observaciones adicionales.'}</p>
+                    </div>
+                    `}
+
+                    ${(formData.firmas && formData.firmas.length > 0) ? `
+                        <h2>${tipo === 'reunion' ? 'Firmas de Asistentes' : 'Asistentes y Firmas'}</h2>
+                        <div class="signatures">
+                            ${formData.firmas.map((f: any) => `
+                                <div class="signature-box">
+                                    <p style="margin:0; font-weight: bold;">${f.nombre}</p>
+                                    <p style="margin:0; font-size: 0.8rem; color: #666;">${f.empresa || ''}</p>
+                                    <img src="${f.url}" class="signature-img" />
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p><i>No hay firmas registradas en este informe.</i></p>'}
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            setGeneratedPdfUrl(url);
+            setIsGeneratingPdf(false);
+        }, 2000); // 2 seconds delay
+    };
 
     // Auto-calculate Subcontratas based on Libro de Subcontratación if empty
     useEffect(() => {
@@ -248,311 +374,457 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                         <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-primary-dark)', fontWeight: 600 }}>
                             Informe: {eventData.title}
                         </h2>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Módulo de reportes y actas</p>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
-                    <Button onClick={handleSave} size="sm" style={{ gap: '0.5rem' }}>
-                        <Save size={16} /> Guardar Informe
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {generatedPdfUrl && !isGeneratingPdf && (
+                        <Button
+                            onClick={() => window.open(generatedPdfUrl, '_blank')}
+                            style={{ backgroundColor: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
+                            className="hover:bg-emerald-600"
+                        >
+                            <ExternalLink size={16} /> Ver documento
+                        </Button>
+                    )}
+
+                    <Button
+                        variant="outline"
+                        onClick={handleGeneratePdf}
+                        disabled={isGeneratingPdf}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderColor: '#3b82f6', color: '#3b82f6' }}
+                        className="hover:bg-blue-50"
+                    >
+                        {isGeneratingPdf ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                        {isGeneratingPdf ? 'Generando...' : 'Generar acta'}
+                    </Button>
+
+                    <Button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Save size={16} /> Guardar
                     </Button>
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '1.5rem' }}>
+            {/* Main Content Area */}
+            <div style={{ position: 'relative', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
 
-                {/* Left Column: Form Fields */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <Card>
-                        <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Datos Generales</h3></CardHeader>
-                        <CardBody>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="input-group">
-                                    <label className="input-label">Fecha y Hora</label>
-                                    <input type="datetime-local" value={formData.fechaHora} onChange={e => handleChange('fechaHora', e.target.value)} className="input-field" />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Coordenadas GPS</label>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <input type="text" value={formData.coordenadas} onChange={e => handleChange('coordenadas', e.target.value)} className="input-field" placeholder="Latitud, Longitud" />
-                                        <Button variant="outline" onClick={handleGetLocation} title="Obtener ubicación actual" style={{ padding: '0.5rem' }}><Camera size={16} /></Button>
-                                    </div>
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Ubicación / Sector</label>
-                                    <input type="text" value={formData.ubicacion} onChange={e => handleChange('ubicacion', e.target.value)} className="input-field" />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Tipo de Obra</label>
-                                    <input type="text" value={formData.tipoObra} onChange={e => handleChange('tipoObra', e.target.value)} className="input-field" />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Nº de Trabajadores</label>
-                                    <input type="number" value={formData.nTrabajadores} onChange={e => handleChange('nTrabajadores', e.target.value)} className="input-field" />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Recurso Preventivo PRESENTE (SÍ/NO y DNI)</label>
-                                    <input type="text" value={formData.recursoPreventivo} onChange={e => handleChange('recursoPreventivo', e.target.value)} className="input-field" />
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
+                {/* Loading Overlay */}
+                {isGeneratingPdf && (
+                    <div style={{
+                        position: 'absolute', inset: 0, zIndex: 10,
+                        backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                        backdropFilter: 'blur(2px)',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        borderRadius: '8px'
+                    }}>
+                        <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
+                        <h3 className="text-xl font-semibold text-blue-900">Generando Acta...</h3>
+                        <p className="text-gray-500">Recopilando información y firmas para el documento PDF.</p>
+                    </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: '1.5rem' }}>
 
-                    <Card>
-                        <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Desarrollo Técnico</h3></CardHeader>
-                        <CardBody>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Subcontratas Involucradas</label>
-                                    <textarea value={formData.subcontratas} onChange={e => handleChange('subcontratas', e.target.value)} className="input-field" rows={3} placeholder="Lista de empresas trabajando actualmente..." />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Trabajos en Curso</label>
-                                    <textarea value={formData.trabajosEnCurso} onChange={e => handleChange('trabajosEnCurso', e.target.value)} className="input-field" rows={3} />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Unidades en Ejecución</label>
-                                    <textarea value={formData.unidadesEjecucion} onChange={e => handleChange('unidadesEjecucion', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Condiciones de Seguridad</h3></CardHeader>
-                        <CardBody>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">EPI's (Equipos de Protección Individual)</label>
-                                    <textarea value={formData.epis} onChange={e => handleChange('epis', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Medios Auxiliares y Equipos de Trabajo</label>
-                                    <textarea value={formData.mediosAuxiliares} onChange={e => handleChange('mediosAuxiliares', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Instalación Eléctrica</label>
-                                    <textarea value={formData.instalacionElectrica} onChange={e => handleChange('instalacionElectrica', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Condiciones Ambientales</label>
-                                    <textarea value={formData.condicionesAmbientales} onChange={e => handleChange('condicionesAmbientales', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Organización de la Obra (Acopios, limpieza, circulaciones)</label>
-                                    <textarea value={formData.organizacionObra} onChange={e => handleChange('organizacionObra', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Acta de Reunión / Visita</h3></CardHeader>
-                        <CardBody>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {tipo === 'reunion' && (
-                                    <div className="input-group">
-                                        <label className="input-label">Desarrollo de la Reunión</label>
-                                        <textarea value={formData.desarrolloReunion} onChange={e => handleChange('desarrolloReunion', e.target.value)} className="input-field" rows={4} />
-                                    </div>
-                                )}
-                                <div className="input-group">
-                                    <label className="input-label">Planificación de Trabajos Próximos</label>
-                                    <textarea value={formData.planificacionTrabajos} onChange={e => handleChange('planificacionTrabajos', e.target.value)} className="input-field" rows={3} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Recordatorio de SyS</label>
-                                    <textarea value={formData.recordatorio} onChange={e => handleChange('recordatorio', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Observaciones y Disconformidades</label>
-                                    <textarea value={formData.observaciones} onChange={e => handleChange('observaciones', e.target.value)} className="input-field" rows={3} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Accidentes / Incidentes reportados</label>
-                                    <textarea value={formData.accidentes} onChange={e => handleChange('accidentes', e.target.value)} className="input-field" rows={2} />
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                </div>
-
-                {/* Right Column: Photos and Signatures */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-                    <Card>
-                        <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Reporte Fotográfico</h3>
-                        </CardHeader>
-                        <CardBody>
-                            <div
-                                {...getRootPropsFotos()}
-                                style={{
-                                    border: `2px dashed ${isDragActiveFotos ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                                    borderRadius: 'var(--radius-lg)',
-                                    padding: '2rem',
-                                    textAlign: 'center',
-                                    backgroundColor: isDragActiveFotos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
-                                    cursor: 'pointer',
-                                    transition: 'all var(--transition-fast)',
-                                    marginBottom: formData.fotos && formData.fotos.length > 0 ? '1rem' : '0'
-                                }}
-                            >
-                                <input {...getInputPropsFotos()} />
-                                <UploadCloud size={32} style={{ color: isDragActiveFotos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
-                                <p style={{ margin: 0, fontSize: '0.875rem' }}>
-                                    {isDragActiveFotos ? "Suelta las imágenes aquí..." : "Arrastra imágenes o haz clic para subir"}
-                                </p>
-                            </div>
-
-                            {formData.fotos && formData.fotos.length > 0 && (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.75rem' }}>
-                                    {formData.fotos.map((photo: any) => (
-                                        <div key={photo.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                                            <img src={photo.url} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleRemovePhoto(photo.id); }}
-                                                style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(255,255,255,0.8)', padding: '4px', borderRadius: '50%', color: '#ef4444', border: 'none', cursor: 'pointer' }}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Firmas Asistentes</h3>
-                            {!showSignaturePad && (
-                                <Button variant="outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }} onClick={() => setShowSignaturePad(true)}>
-                                    <Plus size={16} /> Añadir Firma
-                                </Button>
-                            )}
-                        </CardHeader>
-                        <CardBody>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {showSignaturePad && (
-                                    <div style={{ border: '1px solid var(--color-primary)', borderRadius: '8px', padding: '1rem', backgroundColor: 'var(--color-surface)' }}>
-                                        <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--color-primary)' }}>Nueva Firma</h4>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                                            <div className="input-group" style={{ marginBottom: 0 }}>
-                                                <label className="input-label">Nombre *</label>
-                                                <input type="text" className="input-field" value={currentSigner.nombre} onChange={e => setCurrentSigner({ ...currentSigner, nombre: e.target.value })} placeholder="Ej. Juan Pérez" />
+                    {/* Conditional Left Column Fields based on 'tipo' */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {tipo === 'visita' && (
+                            <>
+                                <Card>
+                                    <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Datos Generales</h3></CardHeader>
+                                    <CardBody>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div className="input-group">
+                                                <label className="input-label">Fecha y Hora</label>
+                                                <input type="datetime-local" value={formData.fechaHora} onChange={e => handleChange('fechaHora', e.target.value)} className="input-field" />
                                             </div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}>
-                                                <label className="input-label">Empresa / Cargo</label>
-                                                <input type="text" className="input-field" value={currentSigner.empresa} onChange={e => setCurrentSigner({ ...currentSigner, empresa: e.target.value })} placeholder="Ej. Constructora SA" />
-                                            </div>
-                                        </div>
-
-                                        <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'white', marginBottom: '1rem' }}>
-                                            <canvas
-                                                ref={canvasRef}
-                                                width={400}
-                                                height={150}
-                                                style={{ width: '100%', height: '150px', touchAction: 'none', cursor: 'crosshair' }}
-                                                onMouseDown={startDrawing}
-                                                onMouseMove={draw}
-                                                onMouseUp={stopDrawing}
-                                                onMouseLeave={stopDrawing}
-                                                onTouchStart={startDrawing}
-                                                onTouchMove={draw}
-                                                onTouchEnd={stopDrawing}
-                                            />
-                                        </div>
-
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                            <Button variant="outline" onClick={clearSignature} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Limpiar</Button>
-                                            <Button variant="outline" onClick={() => setShowSignaturePad(false)} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Cancelar</Button>
-                                            <Button onClick={saveSignature} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Guardar Firma</Button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {formData.firmas && formData.firmas.length > 0 ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                        {formData.firmas.map((firma: any) => (
-                                            <div key={firma.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'white' }}>
-                                                <div>
-                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{firma.nombre}</p>
-                                                    {firma.empresa && <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{firma.empresa}</p>}
-                                                    <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)' }}>{firma.fecha}</p>
+                                            <div className="input-group">
+                                                <label className="input-label">Coordenadas GPS</label>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <input type="text" value={formData.coordenadas} onChange={e => handleChange('coordenadas', e.target.value)} className="input-field" placeholder="Latitud, Longitud" />
+                                                    <Button variant="outline" onClick={handleGetLocation} title="Obtener ubicación actual" style={{ padding: '0.5rem' }}><Camera size={16} /></Button>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                    <img src={firma.url} alt={`Firma de ${firma.nombre}`} style={{ height: '40px', objectFit: 'contain', borderBottom: '1px solid var(--border-color)' }} />
-                                                    <button onClick={() => removeSignature(firma.id)} className="btn-icon text-red-500">
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Ubicación / Sector</label>
+                                                <input type="text" value={formData.ubicacion} onChange={e => handleChange('ubicacion', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Tipo de Obra</label>
+                                                <input type="text" value={formData.tipoObra} onChange={e => handleChange('tipoObra', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Nº de Trabajadores</label>
+                                                <input type="number" value={formData.nTrabajadores} onChange={e => handleChange('nTrabajadores', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Recurso Preventivo PRESENTE (SÍ/NO y DNI)</label>
+                                                <input type="text" value={formData.recursoPreventivo} onChange={e => handleChange('recursoPreventivo', e.target.value)} className="input-field" />
+                                            </div>
+                                        </div>
+                                    </CardBody>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Desarrollo Técnico</h3></CardHeader>
+                                    <CardBody>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Subcontratas Involucradas</label>
+                                                <textarea value={formData.subcontratas} onChange={e => handleChange('subcontratas', e.target.value)} className="input-field" rows={3} placeholder="Lista de empresas trabajando actualmente..." />
+                                            </div>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Trabajos en Curso</label>
+                                                <textarea value={formData.trabajosEnCurso} onChange={e => handleChange('trabajosEnCurso', e.target.value)} className="input-field" rows={3} />
+                                            </div>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Unidades en Ejecución</label>
+                                                <textarea value={formData.unidadesEjecucion} onChange={e => handleChange('unidadesEjecucion', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                        </div>
+                                    </CardBody>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Condiciones de Seguridad</h3></CardHeader>
+                                    <CardBody>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Protecciones y Medios Auxiliares</label>
+                                                <textarea value={formData.mediosAuxiliares} onChange={e => handleChange('mediosAuxiliares', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Instalación Eléctrica</label>
+                                                <input type="text" value={formData.instalacionElectrica} onChange={e => handleChange('instalacionElectrica', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">EPIs</label>
+                                                <input type="text" value={formData.epis} onChange={e => handleChange('epis', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Organización de la Obra</label>
+                                                <input type="text" value={formData.organizacionObra} onChange={e => handleChange('organizacionObra', e.target.value)} className="input-field" />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Cond. Ambientales</label>
+                                                <input type="text" value={formData.condicionesAmbientales} onChange={e => handleChange('condicionesAmbientales', e.target.value)} className="input-field" />
+                                            </div>
+                                        </div>
+                                    </CardBody>
+                                </Card>
+                            </>
+                        )}
+
+                        {tipo === 'reunion' && (
+                            <Card>
+                                <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Contenido de la Reunión</h3></CardHeader>
+                                <CardBody>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div className="input-group">
+                                            <label className="input-label">Introducción</label>
+                                            <textarea value={formData.introduccion} onChange={e => handleChange('introduccion', e.target.value)} className="input-field" rows={3} placeholder="Breve introducción de la reunión..." />
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label">Asistentes</label>
+                                            <textarea value={formData.asistentes} onChange={e => handleChange('asistentes', e.target.value)} className="input-field" rows={2} placeholder="Lista de asistentes..." />
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label">Desarrollo de la reunión</label>
+                                            <textarea value={formData.desarrolloReunion} onChange={e => handleChange('desarrolloReunion', e.target.value)} className="input-field" rows={5} placeholder="Puntos tratados..." />
+                                        </div>
+
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.esReunionPuntual}
+                                                onChange={(e) => handleChange('esReunionPuntual', e.target.checked ? "true" : "")}
+                                                style={{ accentColor: 'var(--color-primary)' }}
+                                            />
+                                            <span style={{ fontSize: '0.9rem', color: 'var(--text-color)', fontWeight: 500 }}>¿Es una reunión puntual? (Sin orden del día)</span>
+                                        </label>
+
+                                        {!formData.esReunionPuntual && (
+                                            <div className="input-group" style={{ marginTop: '0.5rem' }}>
+                                                <label className="input-label">Orden del Día</label>
+                                                <textarea
+                                                    value={formData.ordenDelDia}
+                                                    onChange={e => handleChange('ordenDelDia', e.target.value)}
+                                                    className="input-field"
+                                                    rows={8}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardBody>
+                            </Card>
+                        )}
+
+                        {tipo === 'visita' && (
+                            <>
+                                <Card>
+                                    <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Condiciones de Seguridad</h3></CardHeader>
+                                    <CardBody>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">EPI's (Equipos de Protección Individual)</label>
+                                                <textarea value={formData.epis} onChange={e => handleChange('epis', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Medios Auxiliares y Equipos de Trabajo</label>
+                                                <textarea value={formData.mediosAuxiliares} onChange={e => handleChange('mediosAuxiliares', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Instalación Eléctrica</label>
+                                                <textarea value={formData.instalacionElectrica} onChange={e => handleChange('instalacionElectrica', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Condiciones Ambientales</label>
+                                                <textarea value={formData.condicionesAmbientales} onChange={e => handleChange('condicionesAmbientales', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="input-label">Organización de la Obra (Acopios, limpieza, circulaciones)</label>
+                                                <textarea value={formData.organizacionObra} onChange={e => handleChange('organizacionObra', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                        </div>
+                                    </CardBody>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader><h3 style={{ margin: 0, fontSize: '1.1rem' }}>Acta de Visita</h3></CardHeader>
+                                    <CardBody>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            <div className="input-group">
+                                                <label className="input-label">Planificación de Trabajos Próximos</label>
+                                                <textarea value={formData.planificacionTrabajos} onChange={e => handleChange('planificacionTrabajos', e.target.value)} className="input-field" rows={3} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Recordatorio de SyS</label>
+                                                <textarea value={formData.recordatorio} onChange={e => handleChange('recordatorio', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Observaciones y Disconformidades</label>
+                                                <textarea value={formData.observaciones} onChange={e => handleChange('observaciones', e.target.value)} className="input-field" rows={3} />
+                                            </div>
+                                            <div className="input-group">
+                                                <label className="input-label">Accidentes / Incidentes reportados</label>
+                                                <textarea value={formData.accidentes} onChange={e => handleChange('accidentes', e.target.value)} className="input-field" rows={2} />
+                                            </div>
+                                        </div>
+                                    </CardBody>
+                                </Card>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Right Column: Photos and Signatures */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                        <Card>
+                            <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Reporte Fotográfico</h3>
+                            </CardHeader>
+                            <CardBody>
+                                <div
+                                    {...getRootPropsFotos()}
+                                    style={{
+                                        border: `2px dashed ${isDragActiveFotos ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-lg)',
+                                        padding: '2rem',
+                                        textAlign: 'center',
+                                        backgroundColor: isDragActiveFotos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                        cursor: 'pointer',
+                                        transition: 'all var(--transition-fast)',
+                                        marginBottom: formData.fotos && formData.fotos.length > 0 ? '1rem' : '0'
+                                    }}
+                                >
+                                    <input {...getInputPropsFotos()} />
+                                    <UploadCloud size={32} style={{ color: isDragActiveFotos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                                    <p style={{ margin: 0, fontSize: '0.875rem' }}>
+                                        {isDragActiveFotos ? "Suelta las imágenes aquí..." : "Arrastra imágenes o haz clic para subir"}
+                                    </p>
+                                </div>
+
+                                {formData.fotos && formData.fotos.length > 0 && (
+                                    <div
+                                        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.75rem' }}
+                                        onDragOver={(e) => e.preventDefault()}
+                                    >
+                                        {formData.fotos.map((photo: any, index: number) => (
+                                            <div
+                                                key={photo.id}
+                                                draggable
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer.setData('text/plain', index.toString());
+                                                }}
+                                                onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                                                    const toIndex = index;
+                                                    if (fromIndex === toIndex) return;
+
+                                                    const newFotos = [...formData.fotos];
+                                                    const [movedItem] = newFotos.splice(fromIndex, 1);
+                                                    newFotos.splice(toIndex, 0, movedItem);
+                                                    setFormData((prev: any) => ({ ...prev, fotos: newFotos }));
+                                                }}
+                                                style={{
+                                                    position: 'relative',
+                                                    aspectRatio: '1',
+                                                    borderRadius: '8px',
+                                                    overflow: 'hidden',
+                                                    border: '2px solid var(--border-color)',
+                                                    cursor: 'grab',
+                                                    transition: 'transform 0.2s',
+                                                    backgroundColor: 'white'
+                                                }}
+                                                className="hover:scale-95 active:scale-90"
+                                            >
+                                                <img src={photo.url} alt="Evidencia" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleRemovePhoto(photo.id); }}
+                                                    style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(255,255,255,0.9)', padding: '4px', borderRadius: '50%', color: '#ef4444', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                                <div style={{ position: 'absolute', bottom: 2, right: 4, fontSize: '10px', color: 'white', textShadow: '0 1px 2px rgba(0,0,0,0.5)', fontWeight: 'bold' }}>
+                                                    {index + 1}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
-                                ) : (
-                                    !showSignaturePad && (
-                                        <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--color-surface)' }}>
-                                            <PenTool size={24} style={{ margin: '0 auto 0.5rem' }} />
-                                            <p style={{ margin: 0, fontSize: '0.875rem' }}>No hay firmas en el informe</p>
-                                        </div>
-                                    )
                                 )}
-                            </div>
-                        </CardBody>
-                    </Card>
+                            </CardBody>
+                        </Card>
 
-                    <Card>
-                        <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Archivos Adjuntos</h3>
-                        </CardHeader>
-                        <CardBody>
-                            <div
-                                {...getRootPropsAdjuntos()}
-                                style={{
-                                    border: `2px dashed ${isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                                    borderRadius: 'var(--radius-lg)',
-                                    padding: '2rem',
-                                    textAlign: 'center',
-                                    backgroundColor: isDragActiveAdjuntos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
-                                    cursor: 'pointer',
-                                    transition: 'all var(--transition-fast)',
-                                    marginBottom: formData.adjuntos && formData.adjuntos.length > 0 ? '1rem' : '0'
-                                }}
-                            >
-                                <input {...getInputPropsAdjuntos()} />
-                                <UploadCloud size={32} style={{ color: isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
-                                <p style={{ margin: 0, fontSize: '0.875rem' }}>
-                                    {isDragActiveAdjuntos ? "Suelta los archivos aquí..." : "Arrastra documentos adicionales o haz clic"}
-                                </p>
-                            </div>
+                        <Card>
+                            <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Firmas Asistentes</h3>
+                                {!showSignaturePad && (
+                                    <Button variant="outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }} onClick={() => setShowSignaturePad(true)}>
+                                        <Plus size={16} /> Añadir Firma
+                                    </Button>
+                                )}
+                            </CardHeader>
+                            <CardBody>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {showSignaturePad && (
+                                        <div style={{ border: '1px solid var(--color-primary)', borderRadius: '8px', padding: '1rem', backgroundColor: 'var(--color-surface)' }}>
+                                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--color-primary)' }}>Nueva Firma</h4>
 
-                            {formData.adjuntos && formData.adjuntos.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {formData.adjuntos.map((file: any) => (
-                                        <div key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
-                                                <div style={{ padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
-                                                    <UploadCloud size={16} style={{ color: 'var(--text-muted)' }} />
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem' }}>
+                                                <div className="input-group" style={{ marginBottom: 0 }}>
+                                                    <label className="input-label">Nombre *</label>
+                                                    <input type="text" className="input-field" value={currentSigner.nombre} onChange={e => setCurrentSigner({ ...currentSigner, nombre: e.target.value })} placeholder="Ej. Juan Pérez" />
                                                 </div>
-                                                <div style={{ overflow: 'hidden' }}>
-                                                    <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>{file.name}</p>
-                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                <div className="input-group" style={{ marginBottom: 0 }}>
+                                                    <label className="input-label">Empresa / Cargo</label>
+                                                    <input type="text" className="input-field" value={currentSigner.empresa} onChange={e => setCurrentSigner({ ...currentSigner, empresa: e.target.value })} placeholder="Ej. Constructora SA" />
                                                 </div>
                                             </div>
-                                            <button onClick={() => handleRemoveAdjunto(file.id)} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar archivo">
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardBody>
-                    </Card>
 
+                                            <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'white', marginBottom: '1rem' }}>
+                                                <canvas
+                                                    ref={canvasRef}
+                                                    width={400}
+                                                    height={250}
+                                                    style={{ width: '100%', height: '250px', touchAction: 'none', cursor: 'crosshair' }}
+                                                    onMouseDown={startDrawing}
+                                                    onMouseMove={draw}
+                                                    onMouseUp={stopDrawing}
+                                                    onMouseLeave={stopDrawing}
+                                                    onTouchStart={startDrawing}
+                                                    onTouchMove={draw}
+                                                    onTouchEnd={stopDrawing}
+                                                />
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                                <Button variant="outline" onClick={clearSignature} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Limpiar</Button>
+                                                <Button variant="outline" onClick={() => setShowSignaturePad(false)} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Cancelar</Button>
+                                                <Button onClick={saveSignature} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>Guardar Firma</Button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {formData.firmas && formData.firmas.length > 0 ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {formData.firmas.map((firma: any) => (
+                                                <div key={firma.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'white' }}>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>{firma.nombre}</p>
+                                                        {firma.empresa && <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{firma.empresa}</p>}
+                                                        <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)' }}>{firma.fecha}</p>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        <img src={firma.url} alt={`Firma de ${firma.nombre}`} style={{ height: '40px', objectFit: 'contain', borderBottom: '1px solid var(--border-color)' }} />
+                                                        <button onClick={() => removeSignature(firma.id)} className="btn-icon text-red-500">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        !showSignaturePad && (
+                                            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', border: '1px dashed var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--color-surface)' }}>
+                                                <PenTool size={24} style={{ margin: '0 auto 0.5rem' }} />
+                                                <p style={{ margin: 0, fontSize: '0.875rem' }}>No hay firmas en el informe</p>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            </CardBody>
+                        </Card>
+
+                        <Card>
+                            <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Archivos Adjuntos</h3>
+                            </CardHeader>
+                            <CardBody>
+                                <div
+                                    {...getRootPropsAdjuntos()}
+                                    style={{
+                                        border: `2px dashed ${isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                        borderRadius: 'var(--radius-lg)',
+                                        padding: '2rem',
+                                        textAlign: 'center',
+                                        backgroundColor: isDragActiveAdjuntos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                        cursor: 'pointer',
+                                        transition: 'all var(--transition-fast)',
+                                        marginBottom: formData.adjuntos && formData.adjuntos.length > 0 ? '1rem' : '0'
+                                    }}
+                                >
+                                    <input {...getInputPropsAdjuntos()} />
+                                    <UploadCloud size={32} style={{ color: isDragActiveAdjuntos ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                                    <p style={{ margin: 0, fontSize: '0.875rem' }}>
+                                        {isDragActiveAdjuntos ? "Suelta los archivos aquí..." : "Arrastra documentos adicionales o haz clic"}
+                                    </p>
+                                </div>
+
+                                {formData.adjuntos && formData.adjuntos.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {formData.adjuntos.map((file: any) => (
+                                            <div key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
+                                                    <div style={{ padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                                        <UploadCloud size={16} style={{ color: 'var(--text-muted)' }} />
+                                                    </div>
+                                                    <div style={{ overflow: 'hidden' }}>
+                                                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>{file.name}</p>
+                                                        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => handleRemoveAdjunto(file.id)} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar archivo">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardBody>
+                        </Card>
+
+                    </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };

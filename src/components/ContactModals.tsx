@@ -97,8 +97,8 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
                         </div>
                         <div className="input-group">
                             <label className="input-label">Empresa</label>
-                            <select required value={formData.empresaId} onChange={e => setFormData({ ...formData, empresaId: e.target.value })} className="input-field" style={{ backgroundColor: 'white' }}>
-                                <option value="" disabled>Seleccionar empresa...</option>
+                            <select value={formData.empresaId} onChange={e => setFormData({ ...formData, empresaId: e.target.value })} className="input-field" style={{ backgroundColor: 'white' }}>
+                                <option value="">Seleccionar empresa (Opcional)</option>
                                 {empresas.map((e: any) => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
                             </select>
                         </div>

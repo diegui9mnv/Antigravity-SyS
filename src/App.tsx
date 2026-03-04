@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Route, Routes, useLocation, Navigate } from 'react-router-dom';
 import { Waves } from 'lucide-react';
 import ProjectsList from './pages/ProjectsList';
 import ProjectDetails from './pages/ProjectDetails';
@@ -19,7 +19,7 @@ const AppLayout = ({ children, userType, onLogout }: { children: ReactNode, user
         <div className={containerClass + " header-content"}>
           <Link to="/" className="logo-area">
             <Waves size={28} />
-            <span>Antigravity Obras</span>
+            <span>Seguridad y Salud</span>
           </Link>
           <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <Link to="/" className="btn btn-ghost">Mis Obras</Link>
@@ -66,7 +66,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ProjectsList />} />
           <Route path="/agenda" element={<Agenda />} />
-          <Route path="/usuarios" element={<UsersList />} />
+          <Route path="/usuarios" element={userType === 'CEMOSA' ? <UsersList /> : <Navigate to="/" />} />
           <Route path="/obra/:id" element={<ProjectDetails />} />
         </Routes>
       </AppLayout>

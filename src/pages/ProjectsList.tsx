@@ -25,7 +25,10 @@ export default function ProjectsList() {
     }, []);
 
     const loadObras = () => {
-        setObras(getObras());
+        const data = getObras();
+        // Sort by date (newest first)
+        data.sort((a: any, b: any) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
+        setObras(data);
     };
 
     const handleCreated = () => {

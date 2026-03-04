@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Building2, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, Users } from 'lucide-react';
 import { getEmpresas, saveEmpresa, updateEmpresa, deleteEmpresa, getPersonas, savePersona, updatePersona, deletePersona } from '../store';
 import { Button } from '../components/ui';
 
@@ -149,10 +149,10 @@ export default function Agenda() {
                                             <td>{emp.correo}</td>
                                             <td>
                                                 <div className="flex justify-center gap-2">
-                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingEmpresa(emp); setShowEmpresaModal(true); }} className="text-gray-500 hover:text-primary">
-                                                        <Edit size={18} />
+                                                    <Button variant="ghost" onClick={() => { setEditingEmpresa(emp); setShowEmpresaModal(true); }} style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
+                                                        <Edit2 size={18} />
                                                     </Button>
-                                                    <Button variant="ghost" size="sm" onClick={() => handleDeleteEmpresa(emp.id)} className="text-gray-500 hover:text-red-500">
+                                                    <Button variant="ghost" onClick={() => handleDeleteEmpresa(emp.id)} style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
                                                         <Trash2 size={18} />
                                                     </Button>
                                                 </div>
@@ -194,10 +194,10 @@ export default function Agenda() {
                                             <td>{getEmpresaName(per.empresaId)}</td>
                                             <td>
                                                 <div className="flex justify-center gap-2">
-                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingPersona(per); setShowPersonaModal(true); }} className="text-gray-500 hover:text-primary">
-                                                        <Edit size={18} />
+                                                    <Button variant="ghost" onClick={() => { setEditingPersona(per); setShowPersonaModal(true); }} style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
+                                                        <Edit2 size={18} />
                                                     </Button>
-                                                    <Button variant="ghost" size="sm" onClick={() => handleDeletePersona(per.id)} className="text-gray-500 hover:text-red-500">
+                                                    <Button variant="ghost" onClick={() => handleDeletePersona(per.id)} style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
                                                         <Trash2 size={18} />
                                                     </Button>
                                                 </div>

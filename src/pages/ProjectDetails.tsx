@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit3, StickyNote, X, Save } from 'lucide-react';
-import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile, updateFile } from '../store';
+import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save } from 'lucide-react';
+import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile, updateFile, saveEmpresa, updateEmpresa, deleteEmpresa, savePersona, updatePersona, deletePersona } from '../store';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { Card, Badge, Button } from '../components/ui';
+import { Card, Badge, Button, MultiSelect } from '../components/ui';
 import { useDropzone } from 'react-dropzone';
 import { EventModal } from '../components/EventModal';
 import { EventReport } from '../components/EventReport';
 import { EmpresaModal, PersonaModal } from '../components/ContactModals';
 import { LibroSubcontrataModal } from '../components/LibroSubcontrataModal';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, obraId, onClearEvent }: any) => {
     // Determine icon based on node name
@@ -386,6 +387,7 @@ export default function ProjectDetails() {
     const [libroSubcontratas, setLibroSubcontratas] = useState<any[]>([]);
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
     const [activeEvent, setActiveEvent] = useState<any>(null);
+    const [activeReportType, setActiveReportType] = useState<'reunion' | 'visita'>('visita');
     const [eventTypeToCreate, setEventTypeToCreate] = useState<'reunion' | 'visita'>('visita');
 
     // Contactos View State
@@ -396,10 +398,93 @@ export default function ProjectDetails() {
     const [internalNotes, setInternalNotes] = useState('');
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
     const [allEmpresas, setAllEmpresas] = useState<any[]>([]);
-    const [selectedEmpresaId, setSelectedEmpresaId] = useState('');
-    const [selectedPersonaId, setSelectedPersonaId] = useState('');
+    const [selectedEmpresaId, setSelectedEmpresaId] = useState<string[]>([]);
+    const [selectedPersonaId, setSelectedPersonaId] = useState<string[]>([]);
     const [assignedContacts, setAssignedContacts] = useState<any[]>([]);
     const [editingContactId, setEditingContactId] = useState<string | null>(null);
+    const [deleteModalState, setDeleteModalState] = useState<{
+        isOpen: boolean;
+        itemName: string;
+        itemType: 'empresa' | 'persona';
+        roleName: string;
+        id: string;
+        key?: string;
+        isCoreRole: boolean;
+        refId?: string;
+    }>({
+        isOpen: false,
+        itemName: '',
+        itemType: 'persona',
+        roleName: '',
+        id: '',
+        isCoreRole: false
+    });
+
+    const handleSaveEmpresa = (data: any) => {
+        if (editingContactId) {
+            updateEmpresa(editingContactId, data);
+        } else {
+            const newId = `emp-${Date.now()}`;
+            saveEmpresa({ id: newId, ...data });
+        }
+        setEditingContactId(null);
+        setIsEmpresaModalOpen(false);
+        loadObraData();
+    };
+
+    const handleSavePersona = (data: any) => {
+        if (editingContactId) {
+            updatePersona(editingContactId, data);
+        } else {
+            const newId = `per-${Date.now()}`;
+            savePersona({ id: newId, ...data });
+        }
+        setEditingContactId(null);
+        setIsPersonaModalOpen(false);
+        loadObraData();
+    };
+
+    const executeDelete = () => {
+        const { id, itemType, isCoreRole, refId, key } = deleteModalState;
+
+        if (itemType === 'persona') {
+            deletePersona(id);
+        } else {
+            deleteEmpresa(id);
+        }
+
+        if (isCoreRole && key) {
+            const currentIds = obra[key];
+            const updatedIds = Array.isArray(currentIds)
+                ? currentIds.filter((cid: string) => cid !== id)
+                : (currentIds === id ? null : currentIds);
+            updateObra(obra.id, { [key]: updatedIds });
+        } else if (refId) {
+            const updated = assignedContacts.filter(c => c.id !== refId);
+            updateObra(obra.id, { agentes: updated });
+        }
+
+        setDeleteModalState({ ...deleteModalState, isOpen: false });
+        loadObraData();
+    };
+
+    const executeUnassign = () => {
+        const { id, isCoreRole, refId, key } = deleteModalState;
+
+        if (isCoreRole && key) {
+            const currentIds = obra[key];
+            const updatedIds = Array.isArray(currentIds)
+                ? currentIds.filter((cid: string) => cid !== id)
+                : (currentIds === id ? null : currentIds);
+            updateObra(obra.id, { [key]: updatedIds });
+        } else if (refId) {
+            const updated = assignedContacts.filter(c => c.id !== refId);
+            updateObra(obra.id, { agentes: updated });
+        }
+
+        setDeleteModalState({ ...deleteModalState, isOpen: false });
+        loadObraData();
+    };
 
     const loadObraData = () => {
         if (id) {
@@ -484,7 +569,7 @@ export default function ProjectDetails() {
     };
 
     const handleSaveEventReport = (eventId: string, updatedData: any) => {
-        if (activeCategory?.id === 'cat-reuniones') {
+        if (activeReportType === 'reunion' || activeCategory?.id === 'cat-reuniones') {
             updateReunion(id!, eventId, updatedData);
             setReuniones(getReuniones(id!));
         } else {
@@ -494,21 +579,22 @@ export default function ProjectDetails() {
         setActiveEvent(null);
     };
 
-    const handleAssignAgent = (type: 'persona' | 'empresa', agentId: string) => {
-        if (!agentId) return;
-        const newContact = { id: `agt-${Date.now()}`, agentId, type, role: 'Colaborador' };
-        const updated = [...assignedContacts, newContact];
+    const handleAssignAgents = (type: 'persona' | 'empresa', agentIds: string[]) => {
+        if (!agentIds || agentIds.length === 0) return;
+
+        const newContacts = agentIds.map(agentId => ({
+            id: `agt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            agentId,
+            type,
+            role: 'Colaborador'
+        }));
+
+        const updated = [...assignedContacts, ...newContacts];
         setAssignedContacts(updated);
         updateObra(obra.id, { agentes: updated });
     };
 
-    const handleRemoveAgent = (agentRefId: string) => {
-        if (window.confirm("¿Retirar asignación?")) {
-            const updated = assignedContacts.filter(c => c.id !== agentRefId);
-            setAssignedContacts(updated);
-            updateObra(obra.id, { agentes: updated });
-        }
-    };
+
 
     const getProjectGlobalFiles = () => {
         let allProjectFiles: any[] = [];
@@ -610,7 +696,7 @@ export default function ProjectDetails() {
                             </thead>
                             <tbody>
                                 {events.map((row: any, index: number) => (
-                                    <tr key={index} style={{ cursor: 'pointer' }} onClick={() => setActiveEvent(row)} className="hover:bg-slate-50 transition-colors">
+                                    <tr key={index} style={{ cursor: 'pointer' }} onClick={() => { setActiveReportType(type); setActiveEvent(row); }} className="hover:bg-slate-50 transition-colors">
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <FileText size={16} style={{ color: 'var(--color-primary)' }} />
@@ -630,18 +716,13 @@ export default function ProjectDetails() {
                                                 <button onClick={(e) => {
                                                     e.stopPropagation();
                                                     // Abre el modal de eventos con los datos actuales para editar
+                                                    setActiveReportType(type);
                                                     setActiveEvent(row);
                                                     setEditingContactId(row.id || row.fallbackId);
                                                     setEventTypeToCreate(type);
                                                     setIsEventModalOpen(true);
-                                                }} className="btn-icon text-gray-500 hover:bg-gray-100" title="Editar Metadatos">
-                                                    <Edit3 size={18} />
-                                                </button>
-                                                <button onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setActiveEvent(row);
-                                                }} className="btn-icon text-primary hover:bg-blue-50" title="Abrir Informe">
-                                                    <ArrowRight size={18} />
+                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
+                                                    <Edit2 size={18} />
                                                 </button>
                                                 <button onClick={(e) => {
                                                     e.stopPropagation();
@@ -654,7 +735,7 @@ export default function ProjectDetails() {
                                                             setVisitas(getVisitas(id!));
                                                         }
                                                     }
-                                                }} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar">
+                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
                                                     <Trash2 size={18} />
                                                 </button>
                                             </div>
@@ -708,9 +789,12 @@ export default function ProjectDetails() {
 
                 <div className="flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
                     <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary-dark)' }}>{obra.denominacion}</h1>
-                            <Badge status={obra.estado}>{obra.estado}</Badge>
+                        <div className="flex items-center gap-4 mb-2">
+                            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', letterSpacing: '-0.025em' }}>{obra.denominacion}</h1>
+                            <div className="flex items-center gap-2">
+                                <Badge status={obra.estado}>{obra.estado}</Badge>
+                                {obra.tipologia && <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 500, marginLeft: '0.25rem' }}>{obra.tipologia}</span>}
+                            </div>
                         </div>
                         <div className="flex gap-4" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
                             <span>Ref: {obra.codigoObra}</span>
@@ -801,7 +885,8 @@ export default function ProjectDetails() {
                             <div style={{ height: '100%', padding: '1.5rem', overflowY: 'auto' }}>
                                 {/* We need to implement EventReport logic mapping here */}
                                 <EventReport
-                                    tipo={activeCategory?.id === 'cat-reuniones' ? 'reunion' : 'visita'}
+                                    key={activeEvent?.id || 'new'}
+                                    tipo={activeReportType}
                                     eventData={activeEvent}
                                     obra={obra}
                                     assignedContacts={assignedContacts}
@@ -1039,6 +1124,7 @@ export default function ProjectDetails() {
                                     {activeEvent ? (
                                         <div style={{ margin: '-1.5rem', flex: 1 }}>
                                             <EventReport
+                                                key={activeEvent?.id || 'new'}
                                                 tipo={activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita'}
                                                 eventData={activeEvent}
                                                 obra={obra}
@@ -1058,50 +1144,78 @@ export default function ProjectDetails() {
                                                             <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Building2 size={18} /> Empresas</h4>
                                                             <Button size="sm" variant="outline" onClick={() => setIsEmpresaModalOpen(true)}>+ Nueva</Button>
                                                         </div>
-                                                        <div className="card-body flex flex-col gap-2" style={{ padding: '1rem', maxHeight: '400px', overflowY: 'auto' }}>
-                                                            {/* Assigned Contratistas as placeholders for now */}
-                                                            <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
-                                                                <div>
-                                                                    <strong>Promotor: </strong>
-                                                                    <div className="flex flex-col gap-1 mt-1">
-                                                                        {(Array.isArray(obra.promotorId) ? obra.promotorId : [obra.promotorId]).filter(Boolean).map((id: string) => (
-                                                                            <span key={id} className="text-gray-600">• {formatAgentName(id, 'empresa')}</span>
+                                                        <div className="card-body flex flex-col gap-3" style={{ padding: '1.25rem', maxHeight: '500px', overflowY: 'auto' }}>
+                                                            {/* REDESIGNED CARDS FOR COMPANIES */}
+                                                            {[
+                                                                { title: 'Promotor', key: 'promotorId', ids: obra.promotorId, icon: <Building2 size={14} /> },
+                                                                { title: 'Contratista Principal', key: 'contratistaId', ids: obra.contratistaId, icon: <Building2 size={14} /> }
+                                                            ].map(group => (
+                                                                <div key={group.title} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                                    <div className="text-xs font-bold text-gray-900 mb-2 pb-1 flex items-center" style={{ fontWeight: 'bold', borderBottom: '2px solid #cbd5e1', gap: '0.5rem' }}>
+                                                                        {group.icon} {group.title}
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        {(Array.isArray(group.ids) ? group.ids : [group.ids]).filter(Boolean).map((id: string, index, arr) => (
+                                                                            <div key={id} className="group flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
+                                                                                <span className="text-gray-700 font-medium text-sm">{formatAgentName(id, 'empresa')}</span>
+                                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={() => {
+                                                                                        const emp = getEmpresa(id);
+                                                                                        setDeleteModalState({
+                                                                                            isOpen: true,
+                                                                                            itemName: emp ? emp.razonSocial : 'Desconocido',
+                                                                                            itemType: 'empresa',
+                                                                                            roleName: group.title,
+                                                                                            id: id,
+                                                                                            key: group.key,
+                                                                                            isCoreRole: true
+                                                                                        });
+                                                                                    }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                </div>
+                                                                            </div>
                                                                         ))}
-                                                                        {(!obra.promotorId || (Array.isArray(obra.promotorId) && obra.promotorId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
-                                                                <div>
-                                                                    <strong>Contratista Principal: </strong>
-                                                                    <div className="flex flex-col gap-1 mt-1">
-                                                                        {(Array.isArray(obra.contratistaId) ? obra.contratistaId : [obra.contratistaId]).filter(Boolean).map((id: string) => (
-                                                                            <span key={id} className="text-gray-600">• {formatAgentName(id, 'empresa')}</span>
-                                                                        ))}
-                                                                        {(!obra.contratistaId || (Array.isArray(obra.contratistaId) && obra.contratistaId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            {/* Others mapping */}
-                                                            {assignedContacts.filter(c => c.type === 'empresa').map((c) => (
-                                                                <div key={c.id} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between group">
-                                                                    <div>
-                                                                        <strong>{c.role}: </strong>
-                                                                        <span className="text-gray-600">{formatAgentName(c.agentId, 'empresa')}</span>
-                                                                    </div>
-                                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '4px' }}><Building2 size={16} /></Button>
-                                                                        <Button variant="ghost" size="sm" onClick={() => handleRemoveAgent(c.id)} className="text-red-500 hover:bg-red-50" style={{ padding: '4px' }}><Trash2 size={16} /></Button>
+                                                                        {(!group.ids || (Array.isArray(group.ids) && group.ids.length === 0)) && <span className="text-gray-400 text-xs italic py-1">Sin asignar</span>}
                                                                     </div>
                                                                 </div>
                                                             ))}
 
-                                                            <div className="mt-2 text-sm flex gap-2">
-                                                                <select className="input-field py-1 flex-1" value={selectedEmpresaId} onChange={e => setSelectedEmpresaId(e.target.value)}>
-                                                                    <option value="" disabled>Seleccione empresa...</option>
-                                                                    {allEmpresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
-                                                                </select>
-                                                                <Button size="sm" onClick={() => { handleAssignAgent('empresa', selectedEmpresaId); setSelectedEmpresaId(''); }}>Asignar</Button>
+                                                            {/* Others mapping */}
+                                                            {assignedContacts.filter(c => c.type === 'empresa').map((c) => (
+                                                                <div key={c.id} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                                    <div className="text-xs font-bold text-gray-900 mb-2 pb-1 flex items-center" style={{ fontWeight: 'bold', borderBottom: '2px solid #cbd5e1', gap: '0.5rem' }}>
+                                                                        <Building2 size={14} /> {c.role}
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between group py-2">
+                                                                        <div className="text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'empresa')}</div>
+                                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                                                const emp = getEmpresa(c.agentId);
+                                                                                setDeleteModalState({
+                                                                                    isOpen: true,
+                                                                                    itemName: emp ? emp.razonSocial : 'Desconocido',
+                                                                                    itemType: 'empresa',
+                                                                                    roleName: c.role,
+                                                                                    id: c.agentId,
+                                                                                    isCoreRole: false,
+                                                                                    refId: c.id
+                                                                                });
+                                                                            }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+
+                                                            <div className="mt-2 pt-2 border-t border-gray-50 flex flex-col gap-2">
+                                                                <MultiSelect
+                                                                    options={allEmpresas.map(e => ({ value: e.id, label: e.razonSocial }))}
+                                                                    value={selectedEmpresaId}
+                                                                    onChange={setSelectedEmpresaId}
+                                                                    placeholder="Asignar otras empresas..."
+                                                                    onAddNew={() => setIsEmpresaModalOpen(true)}
+                                                                />
+                                                                <Button size="sm" onClick={() => { handleAssignAgents('empresa', selectedEmpresaId); setSelectedEmpresaId([]); }} className="w-full">Asignar Seleccionados</Button>
                                                             </div>
                                                         </div>
                                                     </Card>
@@ -1112,62 +1226,85 @@ export default function ProjectDetails() {
                                                             <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Users size={18} /> Personas</h4>
                                                             <Button size="sm" variant="outline" onClick={() => setIsPersonaModalOpen(true)}>+ Nueva</Button>
                                                         </div>
-                                                        <div className="card-body flex flex-col gap-2" style={{ padding: '1rem', maxHeight: '400px', overflowY: 'auto' }}>
-                                                            {/* Core roles manually listed */}
-                                                            <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
-                                                                <div>
-                                                                    <div className="text-xs text-primary font-bold mb-1"><FileBadge size={14} className="inline mr-1" />Director de Obra</div>
-                                                                    <div className="flex flex-col gap-1">
-                                                                        {(Array.isArray(obra.directorObraId) ? obra.directorObraId : [obra.directorObraId]).filter(Boolean).map((id: string) => (
-                                                                            <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
+                                                        <div className="card-body flex flex-col gap-3" style={{ padding: '1.25rem', maxHeight: '500px', overflowY: 'auto' }}>
+                                                            {/* REDESIGNED CARDS FOR PERSONS */}
+                                                            {[
+                                                                { title: 'Director de Obra', key: 'directorObraId', ids: obra.directorObraId, icon: <FileBadge size={14} /> },
+                                                                { title: 'Jefe de Obra', key: 'jefeObraId', ids: obra.jefeObraId, icon: <FileBadge size={14} /> },
+                                                                { title: 'Coordinador SyS', key: 'coordinadorSysId', ids: obra.coordinadorSysId, icon: <Shield size={14} /> }
+                                                            ].map(group => (
+                                                                <div key={group.title} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                                    <div className="text-xs font-bold text-gray-900 mb-2 pb-1 flex items-center" style={{ fontWeight: 'bold', borderBottom: '2px solid #cbd5e1', gap: '0.5rem' }}>
+                                                                        {group.icon} {group.title}
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        {(Array.isArray(group.ids) ? group.ids : [group.ids]).filter(Boolean).map((id: string, index, arr) => (
+                                                                            <div key={id} className="group flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
+                                                                                <span className="text-gray-700 font-medium text-sm">{formatAgentName(id, 'persona')}</span>
+                                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={() => {
+                                                                                        const person = getPersona(id);
+                                                                                        setDeleteModalState({
+                                                                                            isOpen: true,
+                                                                                            itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
+                                                                                            itemType: 'persona',
+                                                                                            roleName: group.title,
+                                                                                            id: id,
+                                                                                            key: group.key,
+                                                                                            isCoreRole: true
+                                                                                        });
+                                                                                    }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                </div>
+                                                                            </div>
                                                                         ))}
-                                                                        {(!obra.directorObraId || (Array.isArray(obra.directorObraId) && obra.directorObraId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
-                                                                <div>
-                                                                    <div className="text-xs text-primary font-bold mb-1"><FileBadge size={14} className="inline mr-1" />Jefe de Obra</div>
-                                                                    <div className="flex flex-col gap-1">
-                                                                        {(Array.isArray(obra.jefeObraId) ? obra.jefeObraId : [obra.jefeObraId]).filter(Boolean).map((id: string) => (
-                                                                            <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
-                                                                        ))}
-                                                                        {(!obra.jefeObraId || (Array.isArray(obra.jefeObraId) && obra.jefeObraId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between">
-                                                                <div>
-                                                                    <div className="text-xs text-primary font-bold mb-1"><Shield size={14} className="inline mr-1" />Coordinador SyS</div>
-                                                                    <div className="flex flex-col gap-1">
-                                                                        {(Array.isArray(obra.coordinadorSysId) ? obra.coordinadorSysId : [obra.coordinadorSysId]).filter(Boolean).map((id: string) => (
-                                                                            <span key={id} className="text-gray-700 font-medium">• {formatAgentName(id, 'persona')}</span>
-                                                                        ))}
-                                                                        {(!obra.coordinadorSysId || (Array.isArray(obra.coordinadorSysId) && obra.coordinadorSysId.length === 0)) && <span className="text-gray-400">Sin asignar</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Custom user roles mapping */}
-                                                            {assignedContacts.filter(c => c.type === 'persona').map((c) => (
-                                                                <div key={c.id} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm flex items-center justify-between group">
-                                                                    <div>
-                                                                        <div className="text-xs text-gray-500 mb-1">{c.role}</div>
-                                                                        <span className="text-gray-700 font-medium">{formatAgentName(c.agentId, 'persona')}</span>
-                                                                    </div>
-                                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '4px' }}><Users size={16} /></Button>
-                                                                        <Button variant="ghost" size="sm" onClick={() => handleRemoveAgent(c.id)} className="text-red-500 hover:bg-red-50" style={{ padding: '4px' }}><Trash2 size={16} /></Button>
+                                                                        {(!group.ids || (Array.isArray(group.ids) && group.ids.length === 0)) && <span className="text-gray-400 text-xs italic py-1">Sin asignar</span>}
                                                                     </div>
                                                                 </div>
                                                             ))}
 
-                                                            <div className="mt-2 text-sm flex gap-2">
-                                                                <select className="input-field py-1 flex-1" value={selectedPersonaId} onChange={e => setSelectedPersonaId(e.target.value)}>
-                                                                    <option value="" disabled>Seleccione persona...</option>
-                                                                    {allPersonas.map(p => <option key={p.id} value={p.id}>{p.nombre} {p.apellidos}</option>)}
-                                                                </select>
-                                                                <Button size="sm" onClick={() => { handleAssignAgent('persona', selectedPersonaId); setSelectedPersonaId(''); }}>Asignar</Button>
+                                                            {/* Custom user roles mapping */}
+                                                            {assignedContacts.filter(c => c.type === 'persona').map((c) => {
+                                                                const personData = allPersonas.find(p => p.id === c.agentId);
+                                                                return (
+                                                                    <div key={c.id} className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                                        <div className="text-xs font-bold text-gray-900 mb-2 pb-1 flex items-center" style={{ fontWeight: 'bold', borderBottom: '2px solid #cbd5e1', gap: '0.5rem' }}>
+                                                                            <Users size={14} />
+                                                                            <span>
+                                                                                {c.role} {personData?.tipo && <span className="font-normal text-gray-500 text-[10px] ml-1">({personData.tipo})</span>}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center justify-between group py-2">
+                                                                            <div className="text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'persona')}</div>
+                                                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                <Button variant="ghost" size="sm" onClick={() => {
+                                                                                    const person = getPersona(c.agentId);
+                                                                                    setDeleteModalState({
+                                                                                        isOpen: true,
+                                                                                        itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
+                                                                                        itemType: 'persona',
+                                                                                        roleName: c.role,
+                                                                                        id: c.agentId,
+                                                                                        isCoreRole: false,
+                                                                                        refId: c.id
+                                                                                    });
+                                                                                }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+
+                                                            <div className="mt-2 pt-2 border-t border-gray-50 flex flex-col gap-2">
+                                                                <MultiSelect
+                                                                    options={allPersonas.map(p => ({ value: p.id, label: `${p.nombre} ${p.apellidos}` }))}
+                                                                    value={selectedPersonaId}
+                                                                    onChange={setSelectedPersonaId}
+                                                                    placeholder="Asignar otras personas..."
+                                                                    onAddNew={() => setIsPersonaModalOpen(true)}
+                                                                />
+                                                                <Button size="sm" onClick={() => { handleAssignAgents('persona', selectedPersonaId); setSelectedPersonaId([]); }} className="w-full">Asignar Seleccionados</Button>
                                                             </div>
                                                         </div>
                                                     </Card>
@@ -1285,7 +1422,7 @@ export default function ProjectDetails() {
                                                                         </thead>
                                                                         <tbody>
                                                                             {(activeCategory.id === 'cat-reuniones' ? reuniones : visitas).map((row: any, index: number) => (
-                                                                                <tr key={index} style={{ cursor: 'pointer' }} onClick={() => setActiveEvent(row)} className="hover:bg-slate-50 transition-colors">
+                                                                                <tr key={index} style={{ cursor: 'pointer' }} onClick={() => { setActiveReportType(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita'); setActiveEvent(row); }} className="hover:bg-slate-50 transition-colors">
                                                                                     <td>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                             <FileText size={16} style={{ color: 'var(--color-primary)' }} />
@@ -1306,8 +1443,10 @@ export default function ProjectDetails() {
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
                                                                                                 setActiveEvent(row);
-                                                                                            }} className="btn-icon text-primary hover:bg-blue-50" title="Abrir Informe">
-                                                                                                <ArrowRight size={18} />
+                                                                                                setEventTypeToCreate(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
+                                                                                                setIsEventModalOpen(true);
+                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
+                                                                                                <Edit2 size={18} />
                                                                                             </button>
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
@@ -1320,7 +1459,7 @@ export default function ProjectDetails() {
                                                                                                         setVisitas(getVisitas(id!));
                                                                                                     }
                                                                                                 }
-                                                                                            }} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar">
+                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
                                                                                                 <Trash2 size={18} />
                                                                                             </button>
                                                                                         </div>
@@ -1391,24 +1530,25 @@ export default function ProjectDetails() {
                     initialData={editingContactId ? getPersona(editingContactId) : null}
                     empresas={allEmpresas}
                     onClose={() => { setIsPersonaModalOpen(false); setEditingContactId(null); }}
-                    onSave={() => {
-                        setIsPersonaModalOpen(false);
-                        setEditingContactId(null);
-                        loadObraData();
-                    }}
+                    onSave={handleSavePersona}
                 />
             )}
             {isEmpresaModalOpen && (
                 <EmpresaModal
                     initialData={editingContactId ? getEmpresa(editingContactId) : null}
                     onClose={() => { setIsEmpresaModalOpen(false); setEditingContactId(null); }}
-                    onSave={() => {
-                        setIsEmpresaModalOpen(false);
-                        setEditingContactId(null);
-                        loadObraData();
-                    }}
+                    onSave={handleSaveEmpresa}
                 />
             )}
+
+            <DeleteConfirmModal
+                isOpen={deleteModalState.isOpen}
+                onClose={() => setDeleteModalState({ ...deleteModalState, isOpen: false })}
+                onDelete={executeDelete}
+                onUnassign={executeUnassign}
+                itemName={deleteModalState.itemName}
+                roleName={deleteModalState.roleName}
+            />
 
             <LibroSubcontrataModal
                 isOpen={isLibroModalOpen}
