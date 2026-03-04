@@ -6,6 +6,7 @@ import ProjectsList from './pages/ProjectsList';
 import ProjectDetails from './pages/ProjectDetails';
 import Agenda from './pages/Agenda';
 import UsersList from './pages/UsersList';
+import Plantillas from './pages/Plantillas';
 import Login from './pages/Login';
 
 const AppLayout = ({ children, userType, onLogout }: { children: ReactNode, userType: string, onLogout: () => void }) => {
@@ -24,7 +25,12 @@ const AppLayout = ({ children, userType, onLogout }: { children: ReactNode, user
           <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <Link to="/" className="btn btn-ghost">Mis Obras</Link>
             <Link to="/agenda" className="btn btn-ghost">Agenda</Link>
-            {userType === 'CEMOSA' && <Link to="/usuarios" className="btn btn-ghost">Usuarios</Link>}
+            {userType === 'CEMOSA' && (
+              <>
+                <Link to="/plantillas" className="btn btn-ghost">Plantillas</Link>
+                <Link to="/usuarios" className="btn btn-ghost">Usuarios</Link>
+              </>
+            )}
             <div style={{ marginLeft: '1rem', borderLeft: '1px solid var(--border-color)', paddingLeft: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                 {userType}
@@ -66,6 +72,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ProjectsList />} />
           <Route path="/agenda" element={<Agenda />} />
+          <Route path="/plantillas" element={userType === 'CEMOSA' ? <Plantillas /> : <Navigate to="/" />} />
           <Route path="/usuarios" element={userType === 'CEMOSA' ? <UsersList /> : <Navigate to="/" />} />
           <Route path="/obra/:id" element={<ProjectDetails />} />
         </Routes>

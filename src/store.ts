@@ -589,3 +589,28 @@ export const getVisitas = (obraId: string) => genericGetRecords('visitas', obraI
 export const saveVisita = (obraId: string, record: any) => genericSaveRecord('visitas', obraId, record);
 export const updateVisita = (obraId: string, recordId: string, data: any) => genericUpdateRecord('visitas', obraId, recordId, data);
 export const deleteVisita = (obraId: string, recordId: string) => genericDeleteRecord('visitas', obraId, recordId);
+
+// Plantillas (Templates)
+// Structure: { categoryId: [ { id, name, size, type, data, dateAdded } ] }
+export const getPlantillas = () => {
+  return JSON.parse(localStorage.getItem('plantillas') || '{}');
+};
+
+export const getPlantillasByCategory = (categoryId: string) => {
+  const store = getPlantillas();
+  return store[categoryId] || [];
+};
+
+export const savePlantilla = (categoryId: string, plantilla: any) => {
+  const store = getPlantillas();
+  if (!store[categoryId]) store[categoryId] = [];
+  store[categoryId].push({ ...plantilla, id: plantilla.id || `tpl-${Date.now()}` });
+  localStorage.setItem('plantillas', JSON.stringify(store));
+};
+
+export const deletePlantilla = (categoryId: string, plantillaId: string) => {
+  const store = getPlantillas();
+  if (!store[categoryId]) return;
+  store[categoryId] = store[categoryId].filter((p: any) => p.id !== plantillaId);
+  localStorage.setItem('plantillas', JSON.stringify(store));
+};

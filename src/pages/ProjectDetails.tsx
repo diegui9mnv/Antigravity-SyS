@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save } from 'lucide-react';
-import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile, updateFile, saveEmpresa, updateEmpresa, deleteEmpresa, savePersona, updatePersona, deletePersona } from '../store';
+import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile, updateFile, saveEmpresa, updateEmpresa, deleteEmpresa, savePersona, updatePersona, deletePersona, getPlantillasByCategory } from '../store';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Card, Badge, Button, MultiSelect } from '../components/ui';
@@ -278,6 +278,9 @@ const GlobalSummarySection = ({ title, files, forceExpand, onUpdate, onDelete }:
 const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obraId: string, category: any, onFilesChanged: () => void }) => {
     const [catFiles, setCatFiles] = useState<any[]>(getFiles(obraId, category.id));
     const [isExpanded, setIsExpanded] = useState(true);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
+    const plantillas = getPlantillasByCategory(category.id);
 
     const onDrop = (acceptedFiles: File[]) => {
         acceptedFiles.forEach(file => {
@@ -330,27 +333,74 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
             </div>
             {isExpanded && (
                 <>
-                    <div
-                        {...getRootProps()}
-                        style={{
-                            border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                            borderRadius: 'var(--radius-md)',
-                            padding: '1.5rem',
-                            textAlign: 'center',
-                            backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
-                            cursor: 'pointer',
-                            transition: 'all var(--transition-fast)',
-                            marginBottom: catFiles.length > 0 ? '1.5rem' : '0'
-                        }}
-                        className="hover:bg-surface-hover"
-                    >
-                        <input {...getInputProps()} />
-                        <UploadCloud size={28} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
-                        {isDragActive ? (
-                            <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)', fontSize: '0.85rem' }}>Suelta los archivos aquí...</p>
-                        ) : (
-                            <div>
-                                <p style={{ margin: '0 0 0.25rem 0', fontWeight: 500, fontSize: '0.85rem' }}>Arrastra y suelta o haz clic para subir</p>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+                        <div
+                            {...getRootProps()}
+                            style={{
+                                border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                borderRadius: 'var(--radius-md)',
+                                padding: '1.5rem',
+                                textAlign: 'center',
+                                backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                cursor: 'pointer',
+                                transition: 'all var(--transition-fast)',
+                                flex: 2
+                            }}
+                            className="hover:bg-surface-hover"
+                        >
+                            <input {...getInputProps()} />
+                            <UploadCloud size={28} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
+                            {isDragActive ? (
+                                <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)', fontSize: '0.85rem' }}>Suelta los archivos aquí...</p>
+                            ) : (
+                                <div>
+                                    <p style={{ margin: '0 0 0.25rem 0', fontWeight: 500, fontSize: '0.85rem' }}>Arrastra y suelta o haz clic para subir</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {plantillas.length > 0 && (
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>O elegir plantilla:</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <select
+                                        value={selectedTemplateId}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                        className="input-field"
+                                        style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem' }}
+                                    >
+                                        <option value="">Seleccionar...</option>
+                                        {plantillas.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        disabled={!selectedTemplateId}
+                                        onClick={() => {
+                                            const plantilla = plantillas.find((p: any) => p.id === selectedTemplateId);
+                                            if (plantilla) {
+                                                const newFile = {
+                                                    id: `doc-${Date.now()}`,
+                                                    name: plantilla.name,
+                                                    size: plantilla.size,
+                                                    type: plantilla.type,
+                                                    uploadDate: new Date().toISOString().split('T')[0],
+                                                    fechaReal: new Date().toISOString().split('T')[0],
+                                                    estado: 'Actual',
+                                                    data: plantilla.data
+                                                };
+                                                addFile(obraId, category.id, newFile);
+                                                setCatFiles(getFiles(obraId, category.id));
+                                                onFilesChanged();
+                                                setSelectedTemplateId('');
+                                            }
+                                        }}
+                                        className="btn btn-primary"
+                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                                    >
+                                        Añadir
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -399,6 +449,9 @@ export default function ProjectDetails() {
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
     const [allEmpresas, setAllEmpresas] = useState<any[]>([]);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string[]>([]);
+
+    // Plantillas state
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
     const [selectedPersonaId, setSelectedPersonaId] = useState<string[]>([]);
     const [assignedContacts, setAssignedContacts] = useState<any[]>([]);
     const [editingContactId, setEditingContactId] = useState<string | null>(null);
@@ -1101,22 +1154,25 @@ export default function ProjectDetails() {
                             </>
                         ) : activeCategory ? (
                             <>
-                                <div className="card-header" style={{ backgroundColor: 'white' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                        <button
-                                            onClick={() => {
-                                                setActiveCategory(null);
-                                                setActiveEvent(null);
-                                            }}
-                                            className="btn-icon" style={{ padding: '0.25rem' }}
-                                        >
-                                            <ArrowLeft size={16} />
-                                        </button>
-                                        <h3 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--color-primary-dark)' }}>
-                                            {activeCategory.name}
-                                        </h3>
+                                <div className="card-header" style={{ backgroundColor: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                            <button
+                                                onClick={() => {
+                                                    setActiveCategory(null);
+                                                    setActiveEvent(null);
+                                                    setFolderStack([]);
+                                                }}
+                                                className="btn-icon" style={{ padding: '0.25rem' }}
+                                            >
+                                                <ArrowLeft size={16} />
+                                            </button>
+                                            <h3 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--color-primary-dark)' }}>
+                                                {activeCategory.name}
+                                            </h3>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Sube y gestiona los archivos para esta sección.</p>
                                     </div>
-                                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Sube y gestiona los archivos para esta sección.</p>
                                 </div>
 
                                 <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem', overflowY: 'auto' }}>
@@ -1363,28 +1419,75 @@ export default function ProjectDetails() {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    {/* Dropzone */}
+                                                    {/* Dropzone with Template Selection */}
                                                     {activeCategory.id !== 'cat-reuniones' && activeCategory.id !== 'cat-visitas' && (
-                                                        <div
-                                                            {...getRootProps()}
-                                                            style={{
-                                                                border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                                                                borderRadius: 'var(--radius-lg)',
-                                                                padding: '3rem 2rem',
-                                                                textAlign: 'center',
-                                                                backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
-                                                                cursor: 'pointer',
-                                                                transition: 'all var(--transition-fast)'
-                                                            }}
-                                                        >
-                                                            <input {...getInputProps()} />
-                                                            <UploadCloud size={48} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 1rem' }} />
-                                                            {isDragActive ? (
-                                                                <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)' }}>Suelta los archivos aquí...</p>
-                                                            ) : (
-                                                                <div>
-                                                                    <p style={{ margin: '0 0 0.5rem 0', fontWeight: 500 }}>Arrastra y suelta archivos aquí, o haz clic para seleccionar</p>
-                                                                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Soporta cualquier tipo de archivo relevante para la obra.</p>
+                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+                                                            <div
+                                                                {...getRootProps()}
+                                                                style={{
+                                                                    border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                                                    borderRadius: 'var(--radius-lg)',
+                                                                    padding: '3rem 2rem',
+                                                                    textAlign: 'center',
+                                                                    backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all var(--transition-fast)',
+                                                                    flex: 2
+                                                                }}
+                                                            >
+                                                                <input {...getInputProps()} />
+                                                                <UploadCloud size={48} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 1rem' }} />
+                                                                {isDragActive ? (
+                                                                    <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)' }}>Suelta los archivos aquí...</p>
+                                                                ) : (
+                                                                    <div>
+                                                                        <p style={{ margin: '0 0 0.5rem 0', fontWeight: 500 }}>Arrastra y suelta archivos aquí, o haz clic para seleccionar</p>
+                                                                        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Soporta cualquier tipo de archivo relevante para la obra.</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {getPlantillasByCategory(activeCategory.id).length > 0 && (
+                                                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '200px' }}>
+                                                                    <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>O elegir plantilla de {activeCategory.name}:</label>
+                                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                        <select
+                                                                            value={selectedTemplateId}
+                                                                            onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                                                            className="input-field"
+                                                                            style={{ flex: 1, padding: '0.625rem 0.75rem' }}
+                                                                        >
+                                                                            <option value="">Seleccionar...</option>
+                                                                            {getPlantillasByCategory(activeCategory.id).map((p: any) => (
+                                                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        <button
+                                                                            disabled={!selectedTemplateId}
+                                                                            onClick={() => {
+                                                                                const plantilla = getPlantillasByCategory(activeCategory.id).find((p: any) => p.id === selectedTemplateId);
+                                                                                if (plantilla) {
+                                                                                    const newFile = {
+                                                                                        id: `doc-${Date.now()}`,
+                                                                                        name: plantilla.name,
+                                                                                        size: plantilla.size,
+                                                                                        type: plantilla.type,
+                                                                                        uploadDate: new Date().toISOString().split('T')[0],
+                                                                                        fechaReal: new Date().toISOString().split('T')[0],
+                                                                                        estado: 'Actual',
+                                                                                        data: plantilla.data
+                                                                                    };
+                                                                                    addFile(id!, activeCategory.id, newFile);
+                                                                                    setFiles(getFiles(id!, activeCategory.id));
+                                                                                    setSelectedTemplateId('');
+                                                                                }
+                                                                            }}
+                                                                            className="btn btn-primary"
+                                                                            style={{ padding: '0.625rem 1rem' }}
+                                                                        >
+                                                                            Añadir
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1484,6 +1587,8 @@ export default function ProjectDetails() {
                                                             )}
                                                         </div>
                                                     )}
+
+                                                    {/* Sección de Plantillas si aplican a esta categoría - ELIMINADA DE AQUÍ (MOVIDA AL HEADER) */}
                                                 </>
                                             )}
                                         </>
@@ -1523,7 +1628,7 @@ export default function ProjectDetails() {
                 />
 
                 {/* Contactos Modals */}
-            </div>
+            </div >
 
             {isPersonaModalOpen && (
                 <PersonaModal
@@ -1532,14 +1637,17 @@ export default function ProjectDetails() {
                     onClose={() => { setIsPersonaModalOpen(false); setEditingContactId(null); }}
                     onSave={handleSavePersona}
                 />
-            )}
-            {isEmpresaModalOpen && (
-                <EmpresaModal
-                    initialData={editingContactId ? getEmpresa(editingContactId) : null}
-                    onClose={() => { setIsEmpresaModalOpen(false); setEditingContactId(null); }}
-                    onSave={handleSaveEmpresa}
-                />
-            )}
+            )
+            }
+            {
+                isEmpresaModalOpen && (
+                    <EmpresaModal
+                        initialData={editingContactId ? getEmpresa(editingContactId) : null}
+                        onClose={() => { setIsEmpresaModalOpen(false); setEditingContactId(null); }}
+                        onSave={handleSaveEmpresa}
+                    />
+                )
+            }
 
             <DeleteConfirmModal
                 isOpen={deleteModalState.isOpen}
@@ -1563,59 +1671,61 @@ export default function ProjectDetails() {
             />
 
             {/* Notas Internas Modal */}
-            {isNotesModalOpen && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000,
-                    padding: '1rem'
-                }}>
-                    <Card style={{ width: '100%', maxWidth: '600px', backgroundColor: 'var(--color-background)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fef3c7', borderBottom: '1px solid #fde68a', padding: '1rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#92400e' }}>
-                                <StickyNote size={20} /> Notas Internas de la Obra
-                            </h3>
-                            <button onClick={() => setIsNotesModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e' }}>
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-                            <textarea
-                                value={internalNotes}
-                                onChange={(e) => setInternalNotes(e.target.value)}
-                                placeholder="Escribe aquí las notas, recordatorios o observaciones de la obra..."
-                                style={{
-                                    width: '100%',
-                                    minHeight: '300px',
-                                    padding: '1rem',
-                                    border: '1px solid #fcd34d',
-                                    borderRadius: '8px',
-                                    backgroundColor: '#fffbeb',
-                                    color: '#451a03',
-                                    fontSize: '1rem',
-                                    resize: 'vertical',
-                                    outline: 'none',
-                                    fontFamily: 'inherit'
-                                }}
-                            />
-                        </div>
-                        <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <Button variant="outline" onClick={() => setIsNotesModalOpen(false)}>Cerrar</Button>
-                            <Button onClick={() => {
-                                updateObra(id!, { ...obra, notasInternas: internalNotes });
-                                loadObraData();
-                                setIsNotesModalOpen(false);
-                            }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Save size={16} /> Guardar Notas
-                            </Button>
-                        </div>
-                    </Card>
-                </div>
-            )}
+            {
+                isNotesModalOpen && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        padding: '1rem'
+                    }}>
+                        <Card style={{ width: '100%', maxWidth: '600px', backgroundColor: 'var(--color-background)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fef3c7', borderBottom: '1px solid #fde68a', padding: '1rem' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#92400e' }}>
+                                    <StickyNote size={20} /> Notas Internas de la Obra
+                                </h3>
+                                <button onClick={() => setIsNotesModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+                                <textarea
+                                    value={internalNotes}
+                                    onChange={(e) => setInternalNotes(e.target.value)}
+                                    placeholder="Escribe aquí las notas, recordatorios o observaciones de la obra..."
+                                    style={{
+                                        width: '100%',
+                                        minHeight: '300px',
+                                        padding: '1rem',
+                                        border: '1px solid #fcd34d',
+                                        borderRadius: '8px',
+                                        backgroundColor: '#fffbeb',
+                                        color: '#451a03',
+                                        fontSize: '1rem',
+                                        resize: 'vertical',
+                                        outline: 'none',
+                                        fontFamily: 'inherit'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <Button variant="outline" onClick={() => setIsNotesModalOpen(false)}>Cerrar</Button>
+                                <Button onClick={() => {
+                                    updateObra(id!, { ...obra, notasInternas: internalNotes });
+                                    loadObraData();
+                                    setIsNotesModalOpen(false);
+                                }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Save size={16} /> Guardar Notas
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
+                )
+            }
         </>
     );
 }
