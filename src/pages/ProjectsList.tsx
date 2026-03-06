@@ -1,34 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, FolderOpen } from 'lucide-react';
-import { getObras, initStore, deleteObra } from '../store';
+import { Edit2, MapPinned, Plus, Search, Trash2 } from 'lucide-react';
+import { deleteObra, getObras, type Obra } from '../lib/api/obras';
 import { Badge, Button } from '../components/ui';
 import CreateProjectModal from '../components/CreateProjectModal';
 
 export default function ProjectsList() {
     const navigate = useNavigate();
-    const [obras, setObras] = useState<any[]>([]);
+    const [obras, setObras] = useState<Obra[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingObra, setEditingObra] = useState<any>(null);
+    const [editingObra, setEditingObra] = useState<Obra | null>(null);
 
     const [filters, setFilters] = useState({
         denominacion: '',
         municipio: '',
         expediente: '',
         cebe: '',
-        estado: ''
+        estado: '',
     });
 
     useEffect(() => {
-        initStore();
         loadObras();
     }, []);
 
-    const loadObras = () => {
-        const data = getObras();
-        // Sort by date (newest first)
-        data.sort((a: any, b: any) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
-        setObras(data);
+    const loadObras = async () => {
+        try {
+            const data = await getObras();
+            data.sort((a: any, b: any) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
+            setObras(data);
+        } catch (error) {
+            console.error(error);
+        }
     };
 
     const handleCreated = () => {
@@ -37,15 +39,19 @@ export default function ProjectsList() {
         setEditingObra(null);
     };
 
-    const handleDelete = (e: React.MouseEvent, id: string, denominacion: string) => {
+    const handleDelete = async (e: React.MouseEvent, id: string, denominacion: string) => {
         e.stopPropagation();
         if (window.confirm(`¿Estás seguro de querer eliminar la obra "${denominacion}"? Esto no se puede deshacer.`)) {
-            deleteObra(id);
-            loadObras();
+            try {
+                await deleteObra(id);
+                loadObras();
+            } catch {
+                alert('Error al eliminar obra');
+            }
         }
     };
 
-    const openEditModal = (e: React.MouseEvent, obra: any) => {
+    const openEditModal = (e: React.MouseEvent, obra: Obra) => {
         e.stopPropagation();
         setEditingObra(obra);
         setIsModalOpen(true);
@@ -53,33 +59,36 @@ export default function ProjectsList() {
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFilters(prev => ({ ...prev, [name]: value }));
+        setFilters((prev) => ({ ...prev, [name]: value }));
     };
 
-    const filteredObras = obras.filter(obra => {
-        return (
-            obra.denominacion.toLowerCase().includes(filters.denominacion.toLowerCase()) &&
-            obra.municipio.toLowerCase().includes(filters.municipio.toLowerCase()) &&
-            obra.expediente.toLowerCase().includes(filters.expediente.toLowerCase()) &&
-            (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase()) &&
-            (filters.estado === '' || obra.estado === filters.estado)
-        );
-    });
+    const filteredObras = obras.filter((obra) => (
+        obra.denominacion.toLowerCase().includes(filters.denominacion.toLowerCase())
+        && (obra.municipio || '').toLowerCase().includes(filters.municipio.toLowerCase())
+        && (obra.expediente || '').toLowerCase().includes(filters.expediente.toLowerCase())
+        && (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase())
+        && (filters.estado === '' || obra.estado === filters.estado)
+    ));
 
     return (
         <div>
-            <div className="flex justify-between items-center" style={{ marginBottom: '2rem' }}>
+            <div className="flex justify-between items-center" style={{ marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
                 <div>
                     <h1>Gestión de Obras</h1>
                     <p style={{ color: 'var(--text-muted)' }}>Administra tus proyectos y su documentación técnica.</p>
                 </div>
-                <Button onClick={() => { setEditingObra(null); setIsModalOpen(true); }}>
-                    <Plus size={18} />
-                    Nueva Obra
-                </Button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <Button variant="outline" onClick={() => navigate('/obras/localizacion')}>
+                        <MapPinned size={18} />
+                        Localización de Obras
+                    </Button>
+                    <Button onClick={() => { setEditingObra(null); setIsModalOpen(true); }}>
+                        <Plus size={18} />
+                        Nueva Obra
+                    </Button>
+                </div>
             </div>
 
-            {/* Filters */}
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <div className="card-body" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div className="input-group" style={{ flex: '1 1 200px', marginBottom: 0 }}>
@@ -113,7 +122,6 @@ export default function ProjectsList() {
                 </div>
             </div>
 
-            {/* Table */}
             <div className="table-container fade-in">
                 <table className="table">
                     <thead>
@@ -129,23 +137,23 @@ export default function ProjectsList() {
                     </thead>
                     <tbody>
                         {filteredObras.length > 0 ? (
-                            filteredObras.map(obra => (
+                            filteredObras.map((obra) => (
                                 <tr key={obra.id} onClick={() => navigate(`/obra/${obra.id}`)} style={{ cursor: 'pointer' }}>
                                     <td style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>{obra.denominacion}</td>
-                                    <td>{obra.municipio}</td>
+                                    <td>{obra.municipio || '-'}</td>
                                     <td>
-                                        <div>{obra.expediente}</div>
+                                        <div>{obra.expediente || '-'}</div>
                                         {obra.cebe && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CEBE: {obra.cebe}</div>}
                                     </td>
-                                    <td><span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{obra.codigoObra}</span></td>
+                                    <td><span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{obra.codigo_obra || '-'}</span></td>
                                     <td><Badge status={obra.estado}>{obra.estado}</Badge></td>
                                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        {obra.fechaInicio} <br /> {obra.fechaFin}
+                                        {obra.fecha_inicio} <br /> {obra.fecha_fin}
                                     </td>
                                     <td>
                                         <div className="actions-cell">
-                                            <button onClick={(e) => { e.stopPropagation(); navigate(`/obra/${obra.id}`); }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Documentación">
-                                                <FolderOpen size={18} />
+                                            <button onClick={(e) => { e.stopPropagation(); navigate(`/obras/localizacion?obraId=${obra.id}`); }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Localización">
+                                                <MapPinned size={18} />
                                             </button>
                                             <button onClick={(e) => openEditModal(e, obra)} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
                                                 <Edit2 size={18} />

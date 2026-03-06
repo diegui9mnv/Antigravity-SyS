@@ -1,10 +1,10 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { CONTACT_TYPES } from '../store';
 import { Button } from './ui';
 
 export function EmpresaModal({ initialData, onClose, onSave }: any) {
     const [formData, setFormData] = useState({
-        razonSocial: initialData?.razonSocial || '',
+        razon_social: initialData?.razon_social || '',
         direccion: initialData?.direccion || '',
         telefono: initialData?.telefono || '',
         correo: initialData?.correo || ''
@@ -24,25 +24,25 @@ export function EmpresaModal({ initialData, onClose, onSave }: any) {
             <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '500px' }}>
                 <div className="card-header flex justify-between items-center">
                     <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{initialData ? 'Editar Empresa' : 'Nueva Empresa'}</h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                 </div>
                 <form onSubmit={handleSubmit}>
                     <div className="card-body" style={{ display: 'grid', gap: '1rem' }}>
                         <div className="input-group">
                             <label className="input-label">Razón Social</label>
-                            <input required value={formData.razonSocial} onChange={e => setFormData({ ...formData, razonSocial: e.target.value })} className="input-field" />
+                            <input required value={formData.razon_social} onChange={e => setFormData({ ...formData, razon_social: e.target.value })} className="input-field" />
                         </div>
                         <div className="input-group">
                             <label className="input-label">Dirección</label>
-                            <input required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} className="input-field" />
+                            <input value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} className="input-field" />
                         </div>
                         <div className="input-group">
                             <label className="input-label">Teléfono</label>
-                            <input required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} className="input-field" />
+                            <input value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} className="input-field" />
                         </div>
                         <div className="input-group">
                             <label className="input-label">Correo Electrónico</label>
-                            <input required type="email" value={formData.correo} onChange={e => setFormData({ ...formData, correo: e.target.value })} className="input-field" />
+                            <input type="email" value={formData.correo} onChange={e => setFormData({ ...formData, correo: e.target.value })} className="input-field" />
                         </div>
                     </div>
                     <div className="card-footer flex justify-end gap-4" style={{ justifyContent: 'flex-end', gap: '1rem' }}>
@@ -60,7 +60,7 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
         nombre: initialData?.nombre || '',
         apellidos: initialData?.apellidos || '',
         tipo: initialData?.tipo || CONTACT_TYPES[0],
-        empresaId: initialData?.empresaId || ''
+        empresa_id: initialData?.empresa_id || ''
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -77,7 +77,7 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
             <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '500px' }}>
                 <div className="card-header flex justify-between items-center">
                     <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{initialData ? 'Editar Persona' : 'Nueva Persona'}</h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
                 </div>
                 <form onSubmit={handleSubmit}>
                     <div className="card-body" style={{ display: 'grid', gap: '1rem' }}>
@@ -97,9 +97,9 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
                         </div>
                         <div className="input-group">
                             <label className="input-label">Empresa</label>
-                            <select value={formData.empresaId} onChange={e => setFormData({ ...formData, empresaId: e.target.value })} className="input-field" style={{ backgroundColor: 'white' }}>
+                            <select value={formData.empresa_id} onChange={e => setFormData({ ...formData, empresa_id: e.target.value })} className="input-field" style={{ backgroundColor: 'white' }}>
                                 <option value="">Seleccionar empresa (Opcional)</option>
-                                {empresas.map((e: any) => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
+                                {empresas.map((e: any) => <option key={e.id} value={e.id}>{e.razon_social}</option>)}
                             </select>
                         </div>
                     </div>
@@ -112,3 +112,5 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
         </div>
     );
 }
+
+

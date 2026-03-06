@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save } from 'lucide-react';
-import { getObra, updateObra, fileStructureTemplate, getFiles, addFile, deleteReunion, getReuniones, saveReunion, updateReunion, deleteVisita, getVisitas, saveVisita, updateVisita, getEmpresa, getPersona, getContactosBase, getLibroSubcontratas, deleteLibroSubcontrata, saveLibroSubcontrata, deleteFile, updateFile, saveEmpresa, updateEmpresa, deleteEmpresa, savePersona, updatePersona, deletePersona, getPlantillasByCategory } from '../store';
+import { updateObra as updateObraLocal, fileStructureTemplate, getPlantillasByCategory } from '../store';
+import { getDocumentos, getTodosDocumentos, uploadDocumento, updateDocumentoMetadata, deleteDocumento, getDocumentoUrl, type DocumentoMetaData } from '../lib/api/documentos';
+import { getEventos, createEvento, updateEvento, deleteEvento, type ObraEvento } from '../lib/api/eventos';
+import { getLibroSubcontratas as getLibroSubcontratasDB, createLibroEntry, updateLibroEntry, deleteLibroEntry, type LibroSubcontrataEntry } from '../lib/api/subcontratas';
+import { getObraWithRelations, updateObraAgentes } from '../lib/api/obras';
+import { getEmpresas as getEmpresasAPI, getPersonas as getPersonasAPI, createEmpresa as createEmpresaAPI, updateEmpresa as updateEmpresaAPI, deleteEmpresa as deleteEmpresaAPI, createPersona as createPersonaAPI, updatePersona as updatePersonaAPI, deletePersona as deletePersonaAPI } from '../lib/api/agenda';
+import { createActaPdfUrl } from '../lib/actaPdf';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Card, Badge, Button, MultiSelect } from '../components/ui';
@@ -12,7 +18,17 @@ import { EmpresaModal, PersonaModal } from '../components/ContactModals';
 import { LibroSubcontrataModal } from '../components/LibroSubcontrataModal';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
-const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, obraId, onClearEvent }: any) => {
+const getNodeFileCount = (node: any, allFiles: DocumentoMetaData[]): number => {
+    if (node.type === 'category') {
+        return allFiles.filter(f => f.category_id === node.id).length;
+    }
+    if (node.children) {
+        return node.children.reduce((acc: number, child: any) => acc + getNodeFileCount(child, allFiles), 0);
+    }
+    return 0;
+};
+
+const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, onClearEvent, allObraFiles }: any) => {
     // Determine icon based on node name
     let NodeIcon = Folders;
     if (node.name.includes("Contactos")) NodeIcon = Users;
@@ -29,19 +45,9 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
     // We only show root items here. Nested items are handled in the Content Area.
     if (level > 0) return null;
 
-    // Calculate file counts dynamically
-    const calculateFileCount = (n: any): number => {
-        let count = 0;
-        if (n.type === 'category') {
-            count += getFiles(obraId, n.id).length;
-        } else if (n.children) {
-            n.children.forEach((child: any) => {
-                count += calculateFileCount(child);
-            });
-        }
-        return count;
-    };
-    const fileCount = calculateFileCount(node);
+    // Para esta migración, simplificaremos el contador quitándolo del árbol para evitar problemas de sincronía,
+    // o calculándolo si le pasásemos todos los archivos. De momento, lo omitimos por simplicidad visual.
+    const fileCount = getNodeFileCount(node, allObraFiles);
 
     const paddingLeft = `1rem`;
 
@@ -67,7 +73,8 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
                 onClick={handleClick}
                 style={{
                     padding: isRoot ? `0.75rem 1rem` : `0.5rem 1rem 0.5rem ${paddingLeft}`,
-                    margin: isRoot ? '0 0.85rem 0.5rem 0.85rem' : '0',
+                    margin: isRoot ? '0 0 0.5rem 0' : '0',
+                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.75rem',
@@ -75,8 +82,10 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
                     backgroundColor: (isActive || isFolderActive) ? 'var(--color-surface-hover)' : 'transparent',
                     color: (isActive || isFolderActive) ? 'var(--color-primary-dark)' : 'var(--text-main)',
                     fontWeight: (isActive || isFolderActive) ? 600 : 400,
-                    border: isRoot ? '1px solid' : 'none',
-                    borderColor: isRoot ? ((isActive || isFolderActive) ? 'var(--color-primary)' : 'var(--border-color)') : 'transparent',
+                    border: 'none',
+                    boxShadow: isRoot
+                        ? `inset 0 0 0 1px ${(isActive || isFolderActive) ? 'var(--color-primary)' : 'var(--border-color)'}`
+                        : 'none',
                     borderLeft: (!isRoot && (isActive || isFolderActive)) ? '3px solid var(--color-primary)' : (!isRoot ? '3px solid transparent' : undefined),
                     borderRadius: isRoot ? 'var(--radius-md)' : '0',
                     marginBottom: isRoot ? '0.5rem' : '0',
@@ -84,12 +93,6 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
                     boxSizing: 'border-box'
                 }}
                 className={isRoot ? "hover:bg-surface-hover shadow-sm" : "hover:bg-surface"}
-                onMouseEnter={(e) => {
-                    if (isRoot) e.currentTarget.style.borderColor = 'var(--color-primary)';
-                }}
-                onMouseLeave={(e) => {
-                    if (isRoot) e.currentTarget.style.borderColor = (isActive || isFolderActive) ? 'var(--color-primary)' : 'var(--border-color)';
-                }}
             >
                 {isCategory && !isRoot ? (
                     <NodeIcon size={isRoot ? 18 : 16} style={{ color: isActive ? 'var(--color-primary)' : 'var(--text-muted)' }} />
@@ -126,7 +129,7 @@ const FileItem = ({
     categoryId: string,
     isGlobal?: boolean,
     onUpdate: (catId: string, fileId: string, field: string, value: any) => void,
-    onDelete: (catId: string, fileId: string) => void
+    onDelete: (catId: string, fileId: string, filePath?: string | null) => void
 }) => {
     const isObsoleto = f.estado === 'Obsoleto';
     const bgColor = isObsoleto ? '#fee2e2' : 'white';
@@ -134,7 +137,13 @@ const FileItem = ({
 
     const handleNameClick = (e: React.MouseEvent) => {
         e.preventDefault();
-        const isPdf = f.name.toLowerCase().endsWith('.pdf');
+
+        if (f.file_path) {
+            window.open(getDocumentoUrl(f.file_path), '_blank');
+            return;
+        }
+
+        const isPdf = f.file_name.toLowerCase().endsWith('.pdf');
 
         if (isPdf) {
             // Document simulation for PDF (HTML view looks better than a blank blob)
@@ -185,7 +194,7 @@ const FileItem = ({
                 <FileIcon size={20} style={{ color: isObsoleto ? '#ef4444' : 'var(--color-primary)', flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
                     <a href="#" onClick={handleNameClick} style={{ margin: 0, fontWeight: 500, fontSize: '0.875rem', color: isObsoleto ? '#b91c1c' : 'var(--color-primary-dark)', textDecoration: 'none' }} className="hover:underline">
-                        {f.name}
+                        {f.file_name}
                     </a>
                     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.75rem', color: isObsoleto ? '#991b1b' : 'var(--text-muted)' }}>
                         {isGlobal && f.path && (
@@ -194,16 +203,16 @@ const FileItem = ({
                                 <span>•</span>
                             </>
                         )}
-                        <span>{formatSize(f.size)}</span>
+                        <span>{formatSize(f.file_size || 0)}</span>
                         <span>•</span>
-                        <span>Subido: {f.uploadDate}</span>
+                        <span>Subido: {f.upload_date}</span>
                         <span>•</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             <label>Fecha Real:</label>
                             <input
                                 type="date"
-                                value={f.fechaReal || f.uploadDate}
-                                onChange={(e) => onUpdate(categoryId, f.id, 'fechaReal', e.target.value)}
+                                value={f.fecha_real || f.upload_date || ''}
+                                onChange={(e) => onUpdate(categoryId, f.id, 'fecha_real', e.target.value)}
                                 style={{ fontSize: '0.7rem', padding: '0.1rem 0.2rem', border: '1px solid var(--border-color)', borderRadius: '4px' }}
                                 onClick={(e) => e.stopPropagation()}
                             />
@@ -225,7 +234,7 @@ const FileItem = ({
                 </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Button variant="ghost" style={{ color: '#ef4444', padding: '0.5rem' }} onClick={() => onDelete(categoryId, f.id)}>
+                <Button variant="ghost" style={{ color: '#ef4444', padding: '0.5rem' }} onClick={() => onDelete(categoryId, f.id, f.file_path)}>
                     <Trash2 size={16} />
                 </Button>
             </div>
@@ -276,42 +285,48 @@ const GlobalSummarySection = ({ title, files, forceExpand, onUpdate, onDelete }:
 
 
 const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obraId: string, category: any, onFilesChanged: () => void }) => {
-    const [catFiles, setCatFiles] = useState<any[]>(getFiles(obraId, category.id));
+    const [catFiles, setCatFiles] = useState<DocumentoMetaData[]>([]);
     const [isExpanded, setIsExpanded] = useState(true);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+    const [isUploading, setIsUploading] = useState(false);
 
     const plantillas = getPlantillasByCategory(category.id);
 
-    const onDrop = (acceptedFiles: File[]) => {
-        acceptedFiles.forEach(file => {
-            const newFileObj = {
-                id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                name: file.name,
-                size: file.size,
-                uploadDate: new Date().toISOString().split('T')[0],
-                fechaReal: new Date().toISOString().split('T')[0],
-                estado: 'Actual'
-            };
-            addFile(obraId, category.id, newFileObj);
-        });
-        setCatFiles(getFiles(obraId, category.id));
+    useEffect(() => {
+        getDocumentos(obraId, category.id).then(setCatFiles).catch(console.error);
+    }, [obraId, category.id]);
+
+    const onDrop = async (acceptedFiles: File[]) => {
+        setIsUploading(true);
+        for (const file of acceptedFiles) {
+            try {
+                await uploadDocumento(obraId, category.id, file);
+            } catch (e) {
+                alert(`Error al subir ${file.name}`);
+            }
+        }
+        const updatedFiles = await getDocumentos(obraId, category.id);
+        setCatFiles(updatedFiles);
+        setIsUploading(false);
         onFilesChanged();
     };
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
 
-    const handleDelete = (fileId: string) => {
+    const handleDelete = async (_catId: string, fileId: string, filePath: string | null = null) => {
         if (window.confirm("¿Eliminar archivo?")) {
-            deleteFile(obraId, category.id, fileId);
-            setCatFiles(getFiles(obraId, category.id));
+            await deleteDocumento(fileId, filePath);
+            const updatedFiles = await getDocumentos(obraId, category.id);
+            setCatFiles(updatedFiles);
             onFilesChanged();
         }
     };
 
-    const handleUpdateFile = (_catId: string, fileId: string, field: string, value: any) => {
-        updateFile(obraId, category.id, fileId, { [field]: value });
-        setCatFiles(getFiles(obraId, category.id));
+    const handleUpdateFile = async (_catId: string, fileId: string, field: string, value: any) => {
+        await updateDocumentoMetadata(fileId, { [field]: value });
+        const updatedFiles = await getDocumentos(obraId, category.id);
+        setCatFiles(updatedFiles);
         onFilesChanged();
     };
 
@@ -352,6 +367,8 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                             <UploadCloud size={28} style={{ color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.5rem' }} />
                             {isDragActive ? (
                                 <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)', fontSize: '0.85rem' }}>Suelta los archivos aquí...</p>
+                            ) : isUploading ? (
+                                <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)', fontSize: '0.85rem' }}>Subiendo archivos...</p>
                             ) : (
                                 <div>
                                     <p style={{ margin: '0 0 0.25rem 0', fontWeight: 500, fontSize: '0.85rem' }}>Arrastra y suelta o haz clic para subir</p>
@@ -376,23 +393,31 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                                     </select>
                                     <button
                                         disabled={!selectedTemplateId}
-                                        onClick={() => {
+                                        onClick={async () => {
                                             const plantilla = plantillas.find((p: any) => p.id === selectedTemplateId);
                                             if (plantilla) {
-                                                const newFile = {
-                                                    id: `doc-${Date.now()}`,
-                                                    name: plantilla.name,
-                                                    size: plantilla.size,
-                                                    type: plantilla.type,
-                                                    uploadDate: new Date().toISOString().split('T')[0],
-                                                    fechaReal: new Date().toISOString().split('T')[0],
-                                                    estado: 'Actual',
-                                                    data: plantilla.data
-                                                };
-                                                addFile(obraId, category.id, newFile);
-                                                setCatFiles(getFiles(obraId, category.id));
-                                                onFilesChanged();
-                                                setSelectedTemplateId('');
+                                                // Convert base64 data to blob
+                                                const byteCharacters = atob(plantilla.data.split(',')[1]);
+                                                const byteNumbers = new Array(byteCharacters.length);
+                                                for (let i = 0; i < byteCharacters.length; i++) {
+                                                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                                }
+                                                const byteArray = new Uint8Array(byteNumbers);
+                                                const blob = new Blob([byteArray], { type: plantilla.type });
+                                                const file = new File([blob], plantilla.name, { type: plantilla.type });
+
+                                                setIsUploading(true);
+                                                try {
+                                                    await uploadDocumento(obraId, category.id, file);
+                                                    const updatedFiles = await getDocumentos(obraId, category.id);
+                                                    setCatFiles(updatedFiles);
+                                                    onFilesChanged();
+                                                    setSelectedTemplateId('');
+                                                } catch (e) {
+                                                    alert('Error al subir la plantilla');
+                                                } finally {
+                                                    setIsUploading(false);
+                                                }
                                             }
                                         }}
                                         className="btn btn-primary"
@@ -429,12 +454,13 @@ export default function ProjectDetails() {
     const [activeCategory, setActiveCategory] = useState<any>(null);
     const [folderStack, setFolderStack] = useState<any[]>([]); // Track folder drill-down
     const [files, setFiles] = useState<any[]>([]);
+    const [allObraFiles, setAllObraFiles] = useState<DocumentoMetaData[]>([]);
     const [expandAll, setExpandAll] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-    const [reuniones, setReuniones] = useState<any[]>([]);
-    const [visitas, setVisitas] = useState<any[]>([]);
-    const [libroSubcontratas, setLibroSubcontratas] = useState<any[]>([]);
+    const [reuniones, setReuniones] = useState<ObraEvento[]>([]);
+    const [visitas, setVisitas] = useState<ObraEvento[]>([]);
+    const [libroSubcontratas, setLibroSubcontratas] = useState<LibroSubcontrataEntry[]>([]);
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
     const [activeEvent, setActiveEvent] = useState<any>(null);
     const [activeReportType, setActiveReportType] = useState<'reunion' | 'visita'>('visita');
@@ -473,55 +499,86 @@ export default function ProjectDetails() {
         isCoreRole: false
     });
 
-    const handleSaveEmpresa = (data: any) => {
-        if (editingContactId) {
-            updateEmpresa(editingContactId, data);
-        } else {
-            const newId = `emp-${Date.now()}`;
-            saveEmpresa({ id: newId, ...data });
+    const persistAssignedContacts = async (next: any[]) => {
+        const previous = assignedContacts;
+        setAssignedContacts(next);
+        if (!obra?.id) return;
+        try {
+            await updateObraAgentes(obra.id, next);
+        } catch (error) {
+            console.error('Error saving colaboradores:', error);
+            setAssignedContacts(previous);
+            alert('No se pudieron guardar los colaboradores en la base de datos.');
         }
-        setEditingContactId(null);
-        setIsEmpresaModalOpen(false);
-        loadObraData();
     };
 
-    const handleSavePersona = (data: any) => {
-        if (editingContactId) {
-            updatePersona(editingContactId, data);
-        } else {
-            const newId = `per-${Date.now()}`;
-            savePersona({ id: newId, ...data });
+    const handleSaveEmpresa = async (data: any) => {
+        try {
+            if (editingContactId) {
+                await updateEmpresaAPI(editingContactId, data);
+            } else {
+                await createEmpresaAPI(data);
+            }
+            setEditingContactId(null);
+            setIsEmpresaModalOpen(false);
+            await loadObraData();
+        } catch (error) {
+            console.error('Error saving empresa:', error);
+            alert('No se pudo guardar la empresa.');
         }
-        setEditingContactId(null);
-        setIsPersonaModalOpen(false);
-        loadObraData();
     };
 
-    const executeDelete = () => {
+    const handleSavePersona = async (data: any) => {
+        try {
+            if (editingContactId) {
+                await updatePersonaAPI(editingContactId, data);
+            } else {
+                await createPersonaAPI({
+                    nombre: data.nombre,
+                    apellidos: data.apellidos,
+                    tipo: data.tipo,
+                    empresa_id: data.empresa_id || null
+                });
+            }
+            setEditingContactId(null);
+            setIsPersonaModalOpen(false);
+            await loadObraData();
+        } catch (error) {
+            console.error('Error saving persona:', error);
+            alert('No se pudo guardar la persona.');
+        }
+    };
+
+    const executeDelete = async () => {
         const { id, itemType, isCoreRole, refId, key } = deleteModalState;
 
-        if (itemType === 'persona') {
-            deletePersona(id);
-        } else {
-            deleteEmpresa(id);
-        }
+        try {
+            if (itemType === 'persona') {
+                await deletePersonaAPI(id);
+            } else {
+                await deleteEmpresaAPI(id);
+            }
 
-        if (isCoreRole && key) {
-            const currentIds = obra[key];
-            const updatedIds = Array.isArray(currentIds)
-                ? currentIds.filter((cid: string) => cid !== id)
-                : (currentIds === id ? null : currentIds);
-            updateObra(obra.id, { [key]: updatedIds });
-        } else if (refId) {
-            const updated = assignedContacts.filter(c => c.id !== refId);
-            updateObra(obra.id, { agentes: updated });
-        }
+            if (isCoreRole && key) {
+                const currentIds = obra[key];
+                const updatedIds = Array.isArray(currentIds)
+                    ? currentIds.filter((cid: string) => cid !== id)
+                    : (currentIds === id ? null : currentIds);
+                updateObraLocal(obra.id, { [key]: updatedIds });
+            } else if (refId) {
+                const updated = assignedContacts.filter(c => c.id !== refId);
+                await persistAssignedContacts(updated);
+            }
 
-        setDeleteModalState({ ...deleteModalState, isOpen: false });
-        loadObraData();
+            setDeleteModalState({ ...deleteModalState, isOpen: false });
+            await loadObraData();
+        } catch (error) {
+            console.error('Error deleting contact:', error);
+            alert('No se pudo eliminar el contacto.');
+        }
     };
 
-    const executeUnassign = () => {
+    const executeUnassign = async () => {
         const { id, isCoreRole, refId, key } = deleteModalState;
 
         if (isCoreRole && key) {
@@ -529,25 +586,73 @@ export default function ProjectDetails() {
             const updatedIds = Array.isArray(currentIds)
                 ? currentIds.filter((cid: string) => cid !== id)
                 : (currentIds === id ? null : currentIds);
-            updateObra(obra.id, { [key]: updatedIds });
+            updateObraLocal(obra.id, { [key]: updatedIds });
         } else if (refId) {
             const updated = assignedContacts.filter(c => c.id !== refId);
-            updateObra(obra.id, { agentes: updated });
+            await persistAssignedContacts(updated);
         }
 
         setDeleteModalState({ ...deleteModalState, isOpen: false });
-        loadObraData();
+        await loadObraData();
     };
 
-    const loadObraData = () => {
+    const normalizeObraForUi = (ob: any) => ({
+        ...ob,
+        codigoObra: ob.codigo_obra ?? ob.codigoObra ?? '',
+        promotorId: ob.promotor_ids ?? ob.promotorId ?? [],
+        contratistaId: ob.contratista_ids ?? ob.contratistaId ?? [],
+        coordinadorSysId: ob.coordinador_sys_ids ?? ob.coordinadorSysId ?? [],
+        directorObraId: ob.director_obra_ids ?? ob.directorObraId ?? [],
+        jefeObraId: ob.jefe_obra_ids ?? ob.jefeObraId ?? [],
+    });
+
+    const normalizeLibroRows = (rows: any[]) =>
+        (rows || []).map((row: any, idx: number) => ({
+            ...row,
+            orden: row.orden ?? idx + 1,
+            subcontrataId: row.subcontrata_id ?? row.subcontrataId,
+            comitenteId: row.comitente_id ?? row.comitenteId,
+            ordenComitente: row.orden_comitente ?? row.ordenComitente,
+        }));
+
+    const loadObraData = async () => {
         if (id) {
-            const ob = getObra(id);
-            setObra(ob);
-            setAssignedContacts(ob?.agentes || []);
-            const baseContacts = getContactosBase();
-            setAllPersonas(baseContacts.personas || []);
-            setAllEmpresas(baseContacts.empresas || []);
+            try {
+                const [obRaw, empresasApi, personasApi] = await Promise.all([
+                    getObraWithRelations(id),
+                    getEmpresasAPI(),
+                    getPersonasAPI()
+                ]);
+
+                const ob = normalizeObraForUi(obRaw);
+                setObra(ob);
+                setAssignedContacts(ob?.agentes || []);
+
+                const empresas = (empresasApi || []).map((e: any) => ({
+                    ...e,
+                    razonSocial: e.razon_social ?? e.razonSocial ?? ''
+                }));
+                const personas = (personasApi || []).map((p: any) => ({
+                    ...p,
+                    empresaId: p.empresa_id ?? p.empresaId ?? null
+                }));
+
+                setAllEmpresas(empresas);
+                setAllPersonas(personas);
+
+                // Fetch all files for counts and global view
+                const allFiles = await getTodosDocumentos(id);
+                setAllObraFiles(allFiles);
+            } catch (error) {
+                console.error('Error cargando obra:', error);
+            }
         }
+    };
+
+    const refreshAllFiles = async () => {
+        if (!id) return;
+        const allFiles = await getTodosDocumentos(id);
+        setAllObraFiles(allFiles);
     };
 
     useEffect(() => {
@@ -555,84 +660,150 @@ export default function ProjectDetails() {
     }, [id]);
 
     useEffect(() => {
-        if (id && activeCategory) {
-            setFiles(getFiles(id, activeCategory.id));
-            if (activeCategory.id === 'cat-reuniones') setReuniones(getReuniones(id));
-            else if (activeCategory.id === 'cat-visitas') setVisitas(getVisitas(id));
-            else if (activeCategory.id === 'cat-libro-subcontrata') setLibroSubcontratas(getLibroSubcontratas(id));
-        } else if (id && folderStack.length > 0) {
-            const activeFolder = folderStack[folderStack.length - 1];
-            setFiles([]);
-            setReuniones(activeFolder.id === 'fol-visitas-reuniones' ? getReuniones(id) : []);
-            setVisitas(activeFolder.id === 'fol-visitas-reuniones' ? getVisitas(id) : []);
-            setLibroSubcontratas(activeFolder.id === 'fol-contratistas' ? getLibroSubcontratas(id) : []);
-        } else {
-            setFiles([]);
-            setReuniones([]);
-            setVisitas([]);
-            setLibroSubcontratas([]);
-        }
-    }, [id, activeCategory, folderStack]);
+        if (!id) return;
+        const loadCategoryData = async () => {
+            if (activeCategory) {
+                try {
+                    const docs = await getDocumentos(id, activeCategory.id);
+                    setFiles(docs);
+                    if (activeCategory.id === 'cat-reuniones') setReuniones(await getEventos(id, 'reunion'));
+                    else if (activeCategory.id === 'cat-visitas') setVisitas(await getEventos(id, 'visita'));
+                    else if (activeCategory.id === 'cat-libro-subcontrata') setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id)));
+                } catch (e) {
+                    console.error('Error fetching category data', e);
+                }
+            } else if (folderStack.length > 0) {
+                const activeFolder = folderStack[folderStack.length - 1];
+                setFiles([]);
+                if (activeFolder.id === 'fol-visitas-reuniones') {
+                    setReuniones(await getEventos(id, 'reunion'));
+                    setVisitas(await getEventos(id, 'visita'));
+                } else if (activeFolder.id === 'fol-contratistas') {
+                    setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id)));
+                }
+            } else {
+                // Global View
+                setFiles(allObraFiles);
+                setReuniones([]);
+                setVisitas([]);
+                setLibroSubcontratas([]);
+            }
+        };
+        loadCategoryData();
+    }, [id, activeCategory, folderStack, allObraFiles]);
 
     // Helper to get all files for a given folder by reading its descendants
     const getAllFolderFiles = (folder: any) => {
-        let allFiles: any[] = [];
+        let folderFiles: any[] = [];
         const processNode = (node: any, path: string) => {
             if (node.type === 'category') {
-                const categoryFiles = getFiles(id!, node.id).map((f: any) => ({ ...f, path: `${path} / ${node.name}`, categoryId: node.id }));
-                allFiles = [...allFiles, ...categoryFiles];
+                const categoryFiles = allObraFiles
+                    .filter(f => f.category_id === node.id)
+                    .map((f: any) => ({ ...f, path: path === '' ? node.name : `${path} / ${node.name}`, categoryId: node.id }));
+                folderFiles = [...folderFiles, ...categoryFiles];
             } else if (node.children) {
                 node.children.forEach((child: any) => processNode(child, path === '' ? node.name : `${path} / ${node.name}`));
             }
         };
         processNode(folder, '');
+        return folderFiles;
+    };
+
+    const getProjectGlobalFiles = () => {
+        let allFiles: any[] = [];
+        fileStructureTemplate.forEach(node => {
+            const nodeFiles = getAllFolderFiles(node);
+            allFiles = [...allFiles, ...nodeFiles];
+        });
         return allFiles;
     };
 
-    const onDrop = (acceptedFiles: File[]) => {
+    const onDrop = async (acceptedFiles: File[]) => {
         if (!id || !activeCategory) return;
-
-        acceptedFiles.forEach(file => {
-            const newFileObj = {
-                id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                name: file.name,
-                size: file.size,
-                uploadDate: new Date().toISOString().split('T')[0]
-            };
-            addFile(id, activeCategory.id, newFileObj);
-        });
-
-        // Refresh files
-        setFiles(getFiles(id, activeCategory.id));
+        for (const file of acceptedFiles) {
+            try {
+                await uploadDocumento(id, activeCategory.id, file);
+            } catch (e) {
+                console.error("Error al subir archivo", e);
+            }
+        }
+        setFiles(await getDocumentos(id, activeCategory.id));
+        await refreshAllFiles();
     };
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
 
-    const handleSaveEvent = (tipo: 'reunion' | 'visita', record: any) => {
+    const handleSaveEvent = async (tipo: 'reunion' | 'visita', record: any) => {
         if (!id) return;
-        if (tipo === 'reunion') {
-            saveReunion(id!, record);
-            setReuniones(getReuniones(id!));
-        } else {
-            saveVisita(id!, record);
-            setVisitas(getVisitas(id!));
-        }
+        const dbRecord = {
+            obra_id: id,
+            tipo: tipo,
+            titulo: record.title || 'Nuevo Evento',
+            fecha_planificada: record.start,
+            fecha_fin: record.end,
+            frecuencia: record.frecuencia || null,
+            estado: record.estado || 'Planificada',
+            coordinador_id: record.coordinadorId || null,
+        };
+        await createEvento(dbRecord);
+        if (tipo === 'reunion') setReuniones(await getEventos(id, 'reunion'));
+        else setVisitas(await getEventos(id, 'visita'));
         setIsEventModalOpen(false);
     };
 
-    const handleSaveEventReport = (eventId: string, updatedData: any) => {
+    const handleSaveEventReport = async (eventId: string, updatedData: any) => {
+        const updates: any = {
+            titulo: updatedData.title || updatedData.titulo, // Handle both possible keys depending on origin
+            fecha_planificada: updatedData.start || updatedData.fecha_planificada,
+            fecha_fin: updatedData.end || updatedData.fecha_fin,
+            estado: updatedData.estado,
+            coordinador_id: updatedData.coordinadorId || updatedData.coordinador_id,
+
+            // New Report Fields mappings
+            introduccion: updatedData.introduccion,
+            asistentes: updatedData.asistentes,
+            es_reunion_puntual: updatedData.esReunionPuntual === 'true' || updatedData.esReunionPuntual === true,
+            orden_del_dia: updatedData.ordenDelDia,
+            desarrollo_reunion: updatedData.desarrolloReunion,
+            ubicacion: updatedData.ubicacion,
+            tipo_obra: updatedData.tipoObra,
+            recurso_preventivo: updatedData.recursoPreventivo,
+            n_trabajadores: updatedData.nTrabajadores,
+            trabajos_en_curso: updatedData.trabajosEnCurso,
+            subcontratas: updatedData.subcontratas,
+            unidades_ejecucion: updatedData.unidadesEjecucion,
+            epis: updatedData.epis,
+            medios_auxiliares: updatedData.mediosAuxiliares,
+            instalacion_electrica: updatedData.instalacionElectrica,
+            condiciones_ambientales: updatedData.condicionesAmbientales,
+            organizacion_obra: updatedData.organizacionObra,
+            observaciones: updatedData.observaciones,
+            accidentes: updatedData.accidentes,
+            recordatorio: updatedData.recordatorio,
+            planificacion_trabajos: updatedData.planificacionTrabajos,
+            coordenadas: updatedData.coordenadas,
+            fecha_hora: updatedData.fechaHora,
+            fotos: updatedData.fotos || [],
+            firmas: updatedData.firmas || [],
+            adjuntos: updatedData.adjuntos || [],
+        };
+
+        // Remove undefined keys to avoid overriding with nulls accidentally if not present
+        Object.keys(updates).forEach(key => updates[key] === undefined && delete updates[key]);
+
+        await updateEvento(eventId, updates);
         if (activeReportType === 'reunion' || activeCategory?.id === 'cat-reuniones') {
-            updateReunion(id!, eventId, updatedData);
-            setReuniones(getReuniones(id!));
+            setReuniones(await getEventos(id!, 'reunion'));
         } else {
-            updateVisita(id!, eventId, updatedData);
-            setVisitas(getVisitas(id!));
+            setVisitas(await getEventos(id!, 'visita'));
         }
-        setActiveEvent(null);
+        if (!updatedData.__keepOpen) {
+            setActiveEvent(null);
+        }
     };
 
-    const handleAssignAgents = (type: 'persona' | 'empresa', agentIds: string[]) => {
+    const handleAssignAgents = async (type: 'persona' | 'empresa', agentIds: string[]) => {
         if (!agentIds || agentIds.length === 0) return;
 
         const newContacts = agentIds.map(agentId => ({
@@ -643,32 +814,53 @@ export default function ProjectDetails() {
         }));
 
         const updated = [...assignedContacts, ...newContacts];
-        setAssignedContacts(updated);
-        updateObra(obra.id, { agentes: updated });
+        await persistAssignedContacts(updated);
     };
 
-
-
-    const getProjectGlobalFiles = () => {
-        let allProjectFiles: any[] = [];
-        fileStructureTemplate.forEach(node => {
-            allProjectFiles = [...allProjectFiles, ...getAllFolderFiles(node)];
-        });
-        return allProjectFiles;
-    };
-
-    // Helper to get current folder or category
     const activeFolder = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
-    const folderGlobalFiles = activeFolder && !activeCategory ? getAllFolderFiles(activeFolder) : [];
-    const projectGlobalFiles = !activeCategory && !activeFolder ? getProjectGlobalFiles() : [];
+
+    // Global file summaries
+    const projectGlobalFiles = getProjectGlobalFiles();
+    const folderGlobalFiles = activeFolder ? getAllFolderFiles(activeFolder) : [];
+
+    const findPersonaById = (agentId: string) => allPersonas.find((p: any) => p.id === agentId);
+    const findEmpresaById = (agentId: string) => allEmpresas.find((e: any) => e.id === agentId);
 
     const formatAgentName = (agentId: string, type: 'persona' | 'empresa') => {
         if (type === 'persona') {
-            const persona = getPersona(agentId);
-            return persona ? `${persona.nombre} ${persona.apellidos}` : 'Desconocido';
+            const persona = findPersonaById(agentId);
+            return persona ? `${persona.nombre} ${persona.apellidos || ''}`.trim() : 'Desconocido';
         } else {
-            const empresa = getEmpresa(agentId);
-            return empresa ? empresa.razonSocial : 'Desconocido';
+            const empresa = findEmpresaById(agentId);
+            return empresa ? (empresa.razonSocial || empresa.razon_social) : 'Desconocido';
+        }
+    };
+
+    const formatComitenteName = (row: any) => {
+        const comitenteRowId = row?.comitenteId;
+        if (!comitenteRowId) return 'Contratista principal';
+        if (comitenteRowId === row?.id && row?.ordenComitente) {
+            return formatAgentName(row.ordenComitente, 'empresa');
+        }
+        const parent = libroSubcontratas.find((r: any) => r.id === comitenteRowId);
+        if (!parent) return '---';
+        return formatAgentName(parent.subcontrataId ?? parent.subcontrata_id, 'empresa');
+    };
+
+    const hasGeneratedActa = (row: any) =>
+        row?.acta_generada === true ||
+        row?.actaGenerada === true ||
+        !!row?.acta_generada_at ||
+        !!row?.actaGeneradaAt ||
+        (Array.isArray(row?.adjuntos) && row.adjuntos.some((a: any) => a?.name === '__acta_generada__'));
+
+    const handleOpenActaPreview = async (tipo: 'reunion' | 'visita', row: any) => {
+        try {
+            const url = await createActaPdfUrl(tipo, row, obra);
+            window.open(url, '_blank');
+        } catch (error) {
+            console.error(error);
+            alert('No se pudo generar la vista del acta.');
         }
     };
 
@@ -683,19 +875,18 @@ export default function ProjectDetails() {
         ));
     };
 
-    const handleUpdateGlobalFile = (categoryId: string, fileId: string, field: string, value: any) => {
-        updateFile(id!, categoryId, fileId, { [field]: value });
+    const handleUpdateGlobalFile = async (_categoryId: string, fileId: string, field: string, value: any) => {
+        await updateDocumentoMetadata(fileId, { [field]: value });
+        await refreshAllFiles();
         if (activeCategory) {
-            setFiles(getFiles(id!, activeCategory.id));
-        } else {
-            setFiles([...files]);
+            setFiles(await getDocumentos(id!, activeCategory.id));
         }
     };
 
     const handleDownloadZip = async () => {
         const zip = new JSZip();
         // Since projectGlobalFiles recalculates every render, we can get it:
-        const allFiles = getProjectGlobalFiles();
+        const allFiles = projectGlobalFiles;
 
         if (allFiles.length === 0) {
             alert('No hay archivos en la obra para descargar.');
@@ -753,39 +944,46 @@ export default function ProjectDetails() {
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <FileText size={16} style={{ color: 'var(--color-primary)' }} />
-                                                <strong>{row.title}</strong>
+                                                <strong>{row.titulo}</strong>
                                             </div>
                                         </td>
                                         <td>
                                             <div style={{ fontSize: '0.85rem' }}>
-                                                <span style={{ color: 'var(--text-muted)' }}>Planificada:</span> {new Date(row.start).toLocaleDateString()}<br />
-                                                <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(row.end).toLocaleDateString()}
+                                                <span style={{ color: 'var(--text-muted)' }}>Planificada:</span> {new Date(row.fecha_planificada).toLocaleDateString()}<br />
+                                                <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(row.fecha_fin).toLocaleDateString()}
                                             </div>
                                         </td>
                                         <td style={{ textAlign: 'center' }}><Badge status={row.estado || 'Planificada'}>{row.estado || 'Planificada'}</Badge></td>
-                                        <td>{formatAgentName(row.coordinadorId, 'persona')}</td>
+                                        <td>{formatAgentName(row.coordinador_id || '', 'persona')}</td>
                                         <td style={{ textAlign: 'center' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                {hasGeneratedActa(row) && (
+                                                    <button onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        await handleOpenActaPreview(type, row);
+                                                    }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
+                                                        <FileText size={18} />
+                                                    </button>
+                                                )}
                                                 <button onClick={(e) => {
                                                     e.stopPropagation();
                                                     // Abre el modal de eventos con los datos actuales para editar
                                                     setActiveReportType(type);
                                                     setActiveEvent(row);
-                                                    setEditingContactId(row.id || row.fallbackId);
+                                                    setEditingContactId(row.id);
                                                     setEventTypeToCreate(type);
                                                     setIsEventModalOpen(true);
                                                 }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                     <Edit2 size={18} />
                                                 </button>
-                                                <button onClick={(e) => {
+                                                <button onClick={async (e) => {
                                                     e.stopPropagation();
                                                     if (window.confirm("¿Eliminar registro?")) {
+                                                        await deleteEvento(row.id);
                                                         if (type === 'reunion') {
-                                                            deleteReunion(id!, row.id || row.fallbackId);
-                                                            setReuniones(getReuniones(id!));
+                                                            setReuniones(await getEventos(id!, 'reunion'));
                                                         } else {
-                                                            deleteVisita(id!, row.id || row.fallbackId);
-                                                            setVisitas(getVisitas(id!));
+                                                            setVisitas(await getEventos(id!, 'visita'));
                                                         }
                                                     }
                                                 }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
@@ -804,18 +1002,18 @@ export default function ProjectDetails() {
     };
     if (!obra) return <div className="container" style={{ padding: '2rem 0' }}>Cargando obra...</div>;
 
-    const renderFileItem = (f: { id: string, name: string, categoryId?: string, path?: string, size: number, uploadDate: string, fechaReal?: string, estado?: string }, isGlobal: boolean = false) => {
+    const renderFileItem = (f: DocumentoMetaData, isGlobal: boolean = false) => {
         return (
             <FileItem
                 key={f.id}
                 file={f}
-                categoryId={isGlobal ? f.categoryId! : activeCategory!.id}
+                categoryId={isGlobal ? f.category_id! : activeCategory!.id}
                 isGlobal={isGlobal}
                 onUpdate={handleUpdateGlobalFile}
-                onDelete={(catId, fileId) => {
+                onDelete={async (_catId, fileId, filePath) => {
                     if (window.confirm("¿Eliminar archivo?")) {
-                        deleteFile(id!, catId, fileId);
-                        setFiles(getFiles(id!, activeCategory?.id || ''));
+                        await deleteDocumento(fileId, filePath || null);
+                        loadObraData();
                     }
                 }}
             />
@@ -915,7 +1113,7 @@ export default function ProjectDetails() {
                             </button>
                         </div>
                         {isSidebarOpen && (
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0' }}>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.85rem' }}>
                                 {fileStructureTemplate.map((node) => (
                                     <DocumentTreeNode
                                         key={node.id}
@@ -924,8 +1122,8 @@ export default function ProjectDetails() {
                                         onSelectCategory={setActiveCategory}
                                         activeFolder={activeFolder}
                                         setFolderStack={setFolderStack}
-                                        obraId={id!}
                                         onClearEvent={() => setActiveEvent(null)}
+                                        allObraFiles={allObraFiles}
                                     />
                                 ))}
                             </div>
@@ -978,12 +1176,12 @@ export default function ProjectDetails() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                                 {activeFolder.children.filter((c: any) => c.id !== 'cat-libro-subcontrata').map((child: any) => (
-                                                    <StandaloneCategoryDropzone
-                                                        key={child.id}
-                                                        obraId={id!}
-                                                        category={child}
-                                                        onFilesChanged={() => setFiles([...files])}
-                                                    />
+                                                        <StandaloneCategoryDropzone
+                                                            key={child.id}
+                                                            obraId={id!}
+                                                            category={child}
+                                                            onFilesChanged={refreshAllFiles}
+                                                        />
                                                 ))}
                                             </div>
                                             <div>
@@ -1003,10 +1201,7 @@ export default function ProjectDetails() {
                                                                     <th>Nº Orden</th>
                                                                     <th>Subcontratista / Autónomo</th>
                                                                     <th>Nivel de subcontratación</th>
-                                                                    <th>Objeto / Trabajos</th>
-                                                                    <th>Fecha de inicio</th>
-                                                                    <th>Fecha de término</th>
-                                                                    <th>Nº Orden de comitente</th>
+                                                                    <th>Comitente</th>
                                                                     <th style={{ textAlign: 'center' }}>Acciones</th>
                                                                 </tr>
                                                             </thead>
@@ -1016,15 +1211,12 @@ export default function ProjectDetails() {
                                                                         <td style={{ textAlign: 'center' }}>{row.orden || index + 1}</td>
                                                                         <td>{formatAgentName(row.subcontrataId, 'empresa')}</td>
                                                                         <td style={{ textAlign: 'center' }}>{row.nivel}</td>
-                                                                        <td>{row.objetoTrabajos}</td>
-                                                                        <td>{row.fechaInicio}</td>
-                                                                        <td>{row.fechaTermino || '---'}</td>
-                                                                        <td style={{ textAlign: 'center' }}>{row.ordenComitente || '---'}</td>
+                                                                        <td style={{ textAlign: 'center' }}>{formatComitenteName(row)}</td>
                                                                         <td style={{ textAlign: 'center' }}>
-                                                                            <button onClick={() => {
+                                                                            <button onClick={async () => {
                                                                                 if (window.confirm("¿Eliminar registro?")) {
-                                                                                    deleteLibroSubcontrata(id!, row.id || row.fallbackId);
-                                                                                    setLibroSubcontratas(getLibroSubcontratas(id!));
+                                                                                    await deleteLibroEntry(row.id);
+                                                                                    setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id!)));
                                                                                 }
                                                                             }} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar">
                                                                                 <Trash2 size={16} />
@@ -1046,7 +1238,7 @@ export default function ProjectDetails() {
                                                         key={child.id}
                                                         obraId={id!}
                                                         category={child}
-                                                        onFilesChanged={() => setFiles([...files])}
+                                                        onFilesChanged={refreshAllFiles}
                                                     />
                                                 ))}
                                             </div>
@@ -1061,34 +1253,42 @@ export default function ProjectDetails() {
                                                     obraId={id!}
                                                     category={child}
                                                     onFilesChanged={() => {
-                                                        // trigger a re-render to update folderGlobalFiles
-                                                        setFiles([...files]);
+                                                        refreshAllFiles();
                                                     }}
                                                 />
                                             ))}
                                         </div>
                                     ) : (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
-                                            {activeFolder.children?.map((child: any) => (
-                                                <Card
-                                                    key={child.id}
-                                                    className="flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-surface-hover transition-colors"
-                                                    onClick={() => {
-                                                        if (child.type === 'category') {
-                                                            setActiveCategory(child);
-                                                        } else {
-                                                            setFolderStack([...folderStack, child]);
-                                                        }
-                                                    }}
-                                                >
-                                                    {child.type === 'category' ? (
-                                                        <FileIcon size={32} style={{ color: 'var(--color-primary)', marginBottom: '0.5rem' }} />
-                                                    ) : (
-                                                        <Folders size={32} style={{ color: 'var(--color-primary)', marginBottom: '0.5rem' }} />
-                                                    )}
-                                                    <span style={{ fontSize: '0.875rem', fontWeight: 500, textAlign: 'center' }}>{child.name}</span>
-                                                </Card>
-                                            ))}
+                                            {activeFolder.children?.map((child: any) => {
+                                                const count = getNodeFileCount(child, allObraFiles);
+                                                return (
+                                                    <Card
+                                                        key={child.id}
+                                                        className="flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-surface-hover transition-colors"
+                                                        onClick={() => {
+                                                            if (child.type === 'category') {
+                                                                setActiveCategory(child);
+                                                            } else {
+                                                                setFolderStack([...folderStack, child]);
+                                                            }
+                                                        }}
+                                                        style={{ position: 'relative' }}
+                                                    >
+                                                        {count > 0 && (
+                                                            <span style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', fontSize: '0.7rem', backgroundColor: 'var(--color-surface)', padding: '0.15rem 0.4rem', borderRadius: '12px', color: 'var(--text-muted)', fontWeight: 600, border: '1px solid var(--border-color)' }}>
+                                                                {count}
+                                                            </span>
+                                                        )}
+                                                        {child.type === 'category' ? (
+                                                            <FileIcon size={32} style={{ color: 'var(--color-primary)', marginBottom: '0.5rem' }} />
+                                                        ) : (
+                                                            <Folders size={32} style={{ color: 'var(--color-primary)', marginBottom: '0.5rem' }} />
+                                                        )}
+                                                        <span style={{ fontSize: '0.875rem', fontWeight: 500, textAlign: 'center' }}>{child.name}</span>
+                                                    </Card>
+                                                );
+                                            })}
                                         </div>
                                     )}
 
@@ -1137,11 +1337,10 @@ export default function ProjectDetails() {
                                                     files={filesInSection}
                                                     forceExpand={expandAll}
                                                     onUpdate={handleUpdateGlobalFile}
-                                                    onDelete={(catId: string, fileId: string) => {
+                                                    onDelete={async (_catId: string, fileId: string, filePath?: string | null) => {
                                                         if (window.confirm("¿Eliminar archivo?")) {
-                                                            deleteFile(id!, catId, fileId);
-                                                            // Force refresh by reloading files
-                                                            setFiles(getFiles(id!, ''));
+                                                            await deleteDocumento(fileId, filePath || null);
+                                                            loadObraData();
                                                         }
                                                     }}
                                                 />
@@ -1171,7 +1370,7 @@ export default function ProjectDetails() {
                                                 {activeCategory.name}
                                             </h3>
                                         </div>
-                                        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Sube y gestiona los archivos para esta sección.</p>
+                                        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>Sube y gestiona los archivos para esta Sección.</p>
                                     </div>
                                 </div>
 
@@ -1217,7 +1416,7 @@ export default function ProjectDetails() {
                                                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                                                                     <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
                                                                                     <Button variant="ghost" size="sm" onClick={() => {
-                                                                                        const emp = getEmpresa(id);
+                                                                                        const emp = findEmpresaById(id);
                                                                                         setDeleteModalState({
                                                                                             isOpen: true,
                                                                                             itemName: emp ? emp.razonSocial : 'Desconocido',
@@ -1247,7 +1446,7 @@ export default function ProjectDetails() {
                                                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                             <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
                                                                             <Button variant="ghost" size="sm" onClick={() => {
-                                                                                const emp = getEmpresa(c.agentId);
+                                                                                const emp = findEmpresaById(c.agentId);
                                                                                 setDeleteModalState({
                                                                                     isOpen: true,
                                                                                     itemName: emp ? emp.razonSocial : 'Desconocido',
@@ -1300,7 +1499,7 @@ export default function ProjectDetails() {
                                                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                                                                                     <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
                                                                                     <Button variant="ghost" size="sm" onClick={() => {
-                                                                                        const person = getPersona(id);
+                                                                                        const person = findPersonaById(id);
                                                                                         setDeleteModalState({
                                                                                             isOpen: true,
                                                                                             itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
@@ -1335,7 +1534,7 @@ export default function ProjectDetails() {
                                                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                                 <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
                                                                                 <Button variant="ghost" size="sm" onClick={() => {
-                                                                                    const person = getPersona(c.agentId);
+                                                                                    const person = findPersonaById(c.agentId);
                                                                                     setDeleteModalState({
                                                                                         isOpen: true,
                                                                                         itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
@@ -1383,10 +1582,7 @@ export default function ProjectDetails() {
                                                                         <th>Nº Orden</th>
                                                                         <th>Subcontratista / Autónomo</th>
                                                                         <th>Nivel de subcontratación</th>
-                                                                        <th>Objeto / Trabajos</th>
-                                                                        <th>Fecha de inicio</th>
-                                                                        <th>Fecha de término</th>
-                                                                        <th>Nº Orden de comitente</th>
+                                                                        <th>Comitente</th>
                                                                         <th style={{ textAlign: 'center' }}>Acciones</th>
                                                                     </tr>
                                                                 </thead>
@@ -1396,15 +1592,12 @@ export default function ProjectDetails() {
                                                                             <td style={{ textAlign: 'center' }}>{row.orden || index + 1}</td>
                                                                             <td>{formatAgentName(row.subcontrataId, 'empresa')}</td>
                                                                             <td style={{ textAlign: 'center' }}>{row.nivel}</td>
-                                                                            <td>{row.objetoTrabajos}</td>
-                                                                            <td>{row.fechaInicio}</td>
-                                                                            <td>{row.fechaTermino || '---'}</td>
-                                                                            <td style={{ textAlign: 'center' }}>{row.ordenComitente || '---'}</td>
+                                                                            <td style={{ textAlign: 'center' }}>{formatComitenteName(row)}</td>
                                                                             <td style={{ textAlign: 'center' }}>
-                                                                                <button onClick={() => {
+                                                                                <button onClick={async () => {
                                                                                     if (window.confirm("¿Eliminar registro?")) {
-                                                                                        deleteLibroSubcontrata(id!, row.id || row.fallbackId);
-                                                                                        setLibroSubcontratas(getLibroSubcontratas(id!));
+                                                                                        await deleteLibroEntry(row.id);
+                                                                                        setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id!)));
                                                                                     }
                                                                                 }} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar">
                                                                                     <Trash2 size={16} />
@@ -1464,21 +1657,21 @@ export default function ProjectDetails() {
                                                                         </select>
                                                                         <button
                                                                             disabled={!selectedTemplateId}
-                                                                            onClick={() => {
+                                                                            onClick={async () => {
                                                                                 const plantilla = getPlantillasByCategory(activeCategory.id).find((p: any) => p.id === selectedTemplateId);
                                                                                 if (plantilla) {
-                                                                                    const newFile = {
-                                                                                        id: `doc-${Date.now()}`,
-                                                                                        name: plantilla.name,
-                                                                                        size: plantilla.size,
-                                                                                        type: plantilla.type,
-                                                                                        uploadDate: new Date().toISOString().split('T')[0],
-                                                                                        fechaReal: new Date().toISOString().split('T')[0],
-                                                                                        estado: 'Actual',
-                                                                                        data: plantilla.data
-                                                                                    };
-                                                                                    addFile(id!, activeCategory.id, newFile);
-                                                                                    setFiles(getFiles(id!, activeCategory.id));
+                                                                                    const byteCharacters = atob(plantilla.data.split(',')[1]);
+                                                                                    const byteNumbers = new Array(byteCharacters.length);
+                                                                                    for (let i = 0; i < byteCharacters.length; i++) {
+                                                                                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                                                                    }
+                                                                                    const byteArray = new Uint8Array(byteNumbers);
+                                                                                    const blob = new Blob([byteArray], { type: plantilla.type });
+                                                                                    const file = new File([blob], plantilla.name, { type: plantilla.type });
+
+                                                                                    await uploadDocumento(id!, activeCategory.id, file);
+                                                                                    setFiles(await getDocumentos(id!, activeCategory.id));
+                                                                                    await refreshAllFiles();
                                                                                     setSelectedTemplateId('');
                                                                                 }
                                                                             }}
@@ -1543,6 +1736,14 @@ export default function ProjectDetails() {
                                                                                     <td>{formatAgentName(row.coordinadorId, 'persona')}</td>
                                                                                     <td style={{ textAlign: 'center' }}>
                                                                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                                                            {hasGeneratedActa(row) && (
+                                                                                                <button onClick={async (e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    await handleOpenActaPreview(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita', row);
+                                                                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
+                                                                                                    <FileText size={18} />
+                                                                                                </button>
+                                                                                            )}
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
                                                                                                 setActiveEvent(row);
@@ -1551,15 +1752,14 @@ export default function ProjectDetails() {
                                                                                             }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                                                                 <Edit2 size={18} />
                                                                                             </button>
-                                                                                            <button onClick={(e) => {
+                                                                                            <button onClick={async (e) => {
                                                                                                 e.stopPropagation();
                                                                                                 if (window.confirm("¿Eliminar registro?")) {
+                                                                                                    await deleteEvento(row.id);
                                                                                                     if (activeCategory.id === 'cat-reuniones') {
-                                                                                                        deleteReunion(id!, row.id || row.fallbackId);
-                                                                                                        setReuniones(getReuniones(id!));
+                                                                                                        setReuniones(await getEventos(id!, 'reunion'));
                                                                                                     } else {
-                                                                                                        deleteVisita(id!, row.id || row.fallbackId);
-                                                                                                        setVisitas(getVisitas(id!));
+                                                                                                        setVisitas(await getEventos(id!, 'visita'));
                                                                                                     }
                                                                                                 }
                                                                                             }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
@@ -1621,7 +1821,7 @@ export default function ProjectDetails() {
                     }}
                     obra={obra}
                     tipo={eventTypeToCreate}
-                    defaultTitle={eventTypeToCreate === 'reunion' ? `Acta reunión ${(reuniones.length + 1).toString().padStart(3, '0')}` : `Acta visita ${(visitas.length + 1).toString().padStart(3, '0')}`}
+                    defaultTitle={eventTypeToCreate === 'reunion' ? `Acta Reunión ${(reuniones.length + 1).toString().padStart(3, '0')}` : `Acta visita ${(visitas.length + 1).toString().padStart(3, '0')}`}
                     assignedContacts={assignedContacts}
                     formatAgentName={formatAgentName}
                     initialData={activeEvent}
@@ -1632,7 +1832,7 @@ export default function ProjectDetails() {
 
             {isPersonaModalOpen && (
                 <PersonaModal
-                    initialData={editingContactId ? getPersona(editingContactId) : null}
+                    initialData={editingContactId ? findPersonaById(editingContactId) : null}
                     empresas={allEmpresas}
                     onClose={() => { setIsPersonaModalOpen(false); setEditingContactId(null); }}
                     onSave={handleSavePersona}
@@ -1642,7 +1842,7 @@ export default function ProjectDetails() {
             {
                 isEmpresaModalOpen && (
                     <EmpresaModal
-                        initialData={editingContactId ? getEmpresa(editingContactId) : null}
+                        initialData={editingContactId ? findEmpresaById(editingContactId) : null}
                         onClose={() => { setIsEmpresaModalOpen(false); setEditingContactId(null); }}
                         onSave={handleSaveEmpresa}
                     />
@@ -1663,9 +1863,19 @@ export default function ProjectDetails() {
                 onClose={() => setIsLibroModalOpen(false)}
                 empresas={allEmpresas}
                 libroActual={libroSubcontratas}
-                onSave={(data) => {
-                    saveLibroSubcontrata(id!, data);
-                    setLibroSubcontratas(getLibroSubcontratas(id!));
+                defaultContratistaIds={Array.isArray(obra?.contratistaId) ? obra.contratistaId : (obra?.contratistaId ? [obra.contratistaId] : [])}
+                onSave={async (data) => {
+                    const created = await createLibroEntry({
+                        obra_id: id!,
+                        subcontrata_id: data.subcontrataId,
+                        nivel: data.nivel,
+                        comitente_id: data.comitenteId || null,
+                        orden_comitente: data.contratistaId || null,
+                    } as any);
+                    if (!created.comitente_id) {
+                        await updateLibroEntry(created.id, { comitente_id: created.id });
+                    }
+                    setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id!)));
                     setIsLibroModalOpen(false);
                 }}
             />
@@ -1715,7 +1925,7 @@ export default function ProjectDetails() {
                             <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <Button variant="outline" onClick={() => setIsNotesModalOpen(false)}>Cerrar</Button>
                                 <Button onClick={() => {
-                                    updateObra(id!, { ...obra, notasInternas: internalNotes });
+                                    updateObraLocal(id!, { ...obra, notasInternas: internalNotes });
                                     loadObraData();
                                     setIsNotesModalOpen(false);
                                 }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1729,3 +1939,9 @@ export default function ProjectDetails() {
         </>
     );
 }
+
+
+
+
+
+

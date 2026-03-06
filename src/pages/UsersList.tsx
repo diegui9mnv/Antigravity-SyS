@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Users, Mail, Building2, Plus, Edit2, Trash2 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
-import { getUsuarios, saveUsuario, updateUsuario, deleteUsuario, getEmpresas, saveEmpresa, getEmpresa } from '../store';
+import { getUsuarios, saveUsuario, updateUsuario, deleteUsuario } from '../store';
+import { getEmpresas, createEmpresa, type Empresa } from '../lib/api/agenda';
 import { EmpresaModal } from '../components/ContactModals';
 
 export default function UsersList() {
     const [usuarios, setUsuarios] = useState<any[]>([]);
-    const [empresas, setEmpresas] = useState<any[]>([]);
+    const [empresas, setEmpresas] = useState<Empresa[]>([]);
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
@@ -16,9 +17,14 @@ export default function UsersList() {
         nombre: '', email: '', tipo: 'CEMOSA', empresaId: ''
     });
 
-    const loadData = () => {
+    const loadData = async () => {
         setUsuarios(getUsuarios());
-        setEmpresas(getEmpresas());
+        try {
+            const emps = await getEmpresas();
+            setEmpresas(emps);
+        } catch (error) {
+            console.error(error);
+        }
     };
 
     useEffect(() => {
@@ -57,12 +63,15 @@ export default function UsersList() {
         }
     };
 
-    const handleSaveEmpresa = (data: any) => {
-        const id = `emp-${Date.now()}`;
-        saveEmpresa({ ...data, id });
-        setIsEmpresaModalOpen(false);
-        loadData();
-        setFormData(prev => ({ ...prev, empresaId: id }));
+    const handleSaveEmpresa = async (data: any) => {
+        try {
+            const newEmp = await createEmpresa(data);
+            setIsEmpresaModalOpen(false);
+            loadData();
+            setFormData(prev => ({ ...prev, empresaId: newEmp.id }));
+        } catch (error) {
+            alert('Error al crear la empresa');
+        }
     };
 
     return (
@@ -119,7 +128,7 @@ export default function UsersList() {
                                     <td>
                                         {u.tipo === 'Externo' && u.empresaId ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>
-                                                <Building2 size={14} /> {getEmpresa(u.empresaId)?.razonSocial || 'Desconocida'}
+                                                <Building2 size={14} /> {empresas.find(e => e.id === u.empresaId)?.razon_social || 'Desconocida'}
                                             </div>
                                         ) : (
                                             <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>-</span>
@@ -189,8 +198,8 @@ export default function UsersList() {
                                                 style={{ backgroundColor: 'white', flex: 1 }}
                                             >
                                                 <option value="" disabled>Seleccionar Empresa...</option>
-                                                {empresas.map(emp => (
-                                                    <option key={emp.id} value={emp.id}>{emp.razonSocial}</option>
+                                                {empresas.map((emp: Empresa) => (
+                                                    <option key={emp.id} value={emp.id}>{emp.razon_social}</option>
                                                 ))}
                                             </select>
                                             <Button type="button" variant="outline" onClick={() => setIsEmpresaModalOpen(true)}>

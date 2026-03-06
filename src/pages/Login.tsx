@@ -1,6 +1,7 @@
-import { Building2, User } from 'lucide-react';
+import { Building2, ShieldCheck, User } from 'lucide-react';
+import type { AppRole } from '../lib/keycloakAuth';
 
-export default function Login({ onLogin }: { onLogin: (tipo: 'CEMOSA' | 'Externo') => void }) {
+export default function Login({ onLogin }: { onLogin: (role: AppRole) => void }) {
     return (
         <div style={{
             display: 'flex',
@@ -17,17 +18,15 @@ export default function Login({ onLogin }: { onLogin: (tipo: 'CEMOSA' | 'Externo
                 boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
                 overflow: 'hidden',
                 width: '100%',
-                maxWidth: '600px',
+                maxWidth: '760px',
                 textAlign: 'center'
             }}>
                 <div style={{ width: '100%', height: '300px', backgroundColor: '#e2e8f0', position: 'relative' }}>
-                    {/* Fallback color if image is missing */}
                     <img
                         src="/welcome-bg.png"
                         alt="Bienvenido a CEMOSA - Grupo Privado Seguridad y Salud"
                         style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: 'white' }}
                         onError={(e) => {
-                            // Fallback rendering in case image doesn't exist yet
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
                             target.parentElement!.innerHTML = `
@@ -43,11 +42,36 @@ export default function Login({ onLogin }: { onLogin: (tipo: 'CEMOSA' | 'Externo
 
                 <div style={{ padding: '3rem 2rem' }}>
                     <h2 style={{ fontSize: '1.5rem', color: '#1e293b', marginBottom: '0.5rem', fontWeight: 600 }}>Bienvenido</h2>
-                    <p style={{ color: '#64748b', marginBottom: '2.5rem' }}>Selecciona tu perfil para acceder a la plataforma</p>
+                    <p style={{ color: '#64748b', marginBottom: '0.5rem' }}>Selecciona tu perfil para acceder a la plataforma</p>
+                    <p style={{ color: '#94a3b8', marginBottom: '2.5rem', fontSize: '0.85rem' }}>Modo local de pruebas (sin Keycloak)</p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
                         <button
-                            onClick={() => onLogin('CEMOSA')}
+                            onClick={() => onLogin('admin')}
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '1rem',
+                                padding: '2rem 1rem',
+                                backgroundColor: '#eff6ff',
+                                border: '2px solid #bfdbfe',
+                                borderRadius: '0.75rem',
+                                color: '#1d4ed8',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                fontWeight: 500,
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                        >
+                            <ShieldCheck size={32} />
+                            Entrar como Admin
+                        </button>
+
+                        <button
+                            onClick={() => onLogin('cemosa')}
                             style={{
                                 display: 'flex',
                                 flexDirection: 'column',
@@ -71,7 +95,7 @@ export default function Login({ onLogin }: { onLogin: (tipo: 'CEMOSA' | 'Externo
                         </button>
 
                         <button
-                            onClick={() => onLogin('Externo')}
+                            onClick={() => onLogin('externo')}
                             style={{
                                 display: 'flex',
                                 flexDirection: 'column',

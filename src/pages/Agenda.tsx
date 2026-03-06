@@ -1,68 +1,90 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Building2, Users } from 'lucide-react';
-import { getEmpresas, saveEmpresa, updateEmpresa, deleteEmpresa, getPersonas, savePersona, updatePersona, deletePersona } from '../store';
+import { getEmpresas, createEmpresa, updateEmpresa, deleteEmpresa, getPersonas, createPersona, updatePersona, deletePersona, type Empresa, type Persona } from '../lib/api/agenda';
 import { Button } from '../components/ui';
 
 import { EmpresaModal, PersonaModal } from '../components/ContactModals';
 
 export default function Agenda() {
     const [activeTab, setActiveTab] = useState<'empresas' | 'personas'>('empresas');
-    const [empresas, setEmpresas] = useState<any[]>([]);
-    const [personas, setPersonas] = useState<any[]>([]);
+    const [empresas, setEmpresas] = useState<Empresa[]>([]);
+    const [personas, setPersonas] = useState<Persona[]>([]);
 
-    const [editingEmpresa, setEditingEmpresa] = useState<any | null>(null);
+    const [editingEmpresa, setEditingEmpresa] = useState<Empresa | null>(null);
     const [showEmpresaModal, setShowEmpresaModal] = useState(false);
 
-    const [editingPersona, setEditingPersona] = useState<any | null>(null);
+    const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
     const [showPersonaModal, setShowPersonaModal] = useState(false);
 
-    const loadData = () => {
-        setEmpresas(getEmpresas());
-        setPersonas(getPersonas());
+    const loadData = async () => {
+        try {
+            const [emps, pers] = await Promise.all([getEmpresas(), getPersonas()]);
+            setEmpresas(emps);
+            setPersonas(pers);
+        } catch (error) {
+            console.error("Error loading data:", error);
+        }
     };
 
     useEffect(() => {
         loadData();
     }, []);
 
-    const handleSaveEmpresa = (data: any) => {
-        if (editingEmpresa) {
-            updateEmpresa(editingEmpresa.id, data);
-        } else {
-            saveEmpresa({ ...data, id: `emp-${Date.now()}` });
+    const handleSaveEmpresa = async (data: any) => {
+        try {
+            if (editingEmpresa?.id) {
+                await updateEmpresa(editingEmpresa.id, data);
+            } else {
+                await createEmpresa(data);
+            }
+            setShowEmpresaModal(false);
+            setEditingEmpresa(null);
+            loadData();
+        } catch (error) {
+            alert('Error al guardar la empresa');
         }
-        setShowEmpresaModal(false);
-        setEditingEmpresa(null);
-        loadData();
     };
 
-    const handleDeleteEmpresa = (id: string) => {
+    const handleDeleteEmpresa = async (id: string) => {
         if (confirm("¿Seguro que quieres eliminar esta empresa?")) {
-            deleteEmpresa(id);
+            try {
+                await deleteEmpresa(id);
+                loadData();
+            } catch (error) {
+                alert('Error al eliminar la empresa');
+            }
+        }
+    };
+
+    const handleSavePersona = async (data: any) => {
+        try {
+            if (editingPersona?.id) {
+                await updatePersona(editingPersona.id, data);
+            } else {
+                await createPersona(data);
+            }
+            setShowPersonaModal(false);
+            setEditingPersona(null);
             loadData();
+        } catch (error) {
+            alert('Error al guardar la persona');
         }
     };
 
-    const handleSavePersona = (data: any) => {
-        if (editingPersona) {
-            updatePersona(editingPersona.id, data);
-        } else {
-            savePersona({ ...data, id: `per-${Date.now()}` });
-        }
-        setShowPersonaModal(false);
-        setEditingPersona(null);
-        loadData();
-    };
-
-    const handleDeletePersona = (id: string) => {
+    const handleDeletePersona = async (id: string) => {
         if (confirm("¿Seguro que quieres eliminar esta persona?")) {
-            deletePersona(id);
-            loadData();
+            try {
+                await deletePersona(id);
+                loadData();
+            } catch (error) {
+                alert('Error al eliminar la persona');
+            }
         }
     };
 
-    const getEmpresaName = (id: string) => {
-        return empresas.find(e => e.id === id)?.razonSocial || 'Desconocida';
+    const getEmpresaName = (id: string | null) => {
+        if (!id) return '-';
+        return empresas.find(e => e.id === id)?.razon_social || 'Desconocida';
     };
 
     return (
@@ -141,9 +163,9 @@ export default function Agenda() {
                                             </td>
                                         </tr>
                                     )}
-                                    {empresas.map(emp => (
+                                    {empresas.map((emp: Empresa) => (
                                         <tr key={emp.id} className="hover:bg-gray-50">
-                                            <td><strong>{emp.razonSocial}</strong></td>
+                                            <td><strong>{emp.razon_social}</strong></td>
                                             <td>{emp.direccion}</td>
                                             <td>{emp.telefono}</td>
                                             <td>{emp.correo}</td>
@@ -186,12 +208,12 @@ export default function Agenda() {
                                             </td>
                                         </tr>
                                     )}
-                                    {personas.map(per => (
+                                    {personas.map((per: Persona) => (
                                         <tr key={per.id} className="hover:bg-gray-50">
                                             <td><strong>{per.nombre}</strong></td>
                                             <td>{per.apellidos}</td>
                                             <td><span className="badge badge-en-curso">{per.tipo}</span></td>
-                                            <td>{getEmpresaName(per.empresaId)}</td>
+                                            <td>{getEmpresaName(per.empresa_id)}</td>
                                             <td>
                                                 <div className="flex justify-center gap-2">
                                                     <Button variant="ghost" onClick={() => { setEditingPersona(per); setShowPersonaModal(true); }} style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">

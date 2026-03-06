@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardBody, Button } from './ui';
 import { ArrowLeft, Save, UploadCloud, Trash2, Camera, PenTool, Plus, FileText, Loader2, ExternalLink } from 'lucide-react';
 import { getLibroSubcontratas } from '../store';
 import { useDropzone } from 'react-dropzone';
+import { createActaPdfUrl } from '../lib/actaPdf';
 
 interface EventReportProps {
     tipo: 'reunion' | 'visita';
@@ -11,31 +12,32 @@ interface EventReportProps {
     assignedContacts: any[];
     formatAgentName: (id: string, type: 'empresa' | 'persona') => string;
     onClose: () => void;
-    onSave: (id: string, updatedData: any) => void;
+    onSave: (id: string, updatedData: any) => Promise<void> | void;
 }
 
 export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra, formatAgentName, onClose, onSave }) => {
+    const ACTA_MARKER = '__acta_generada__';
     const [formData, setFormData] = useState<any>({
         // Original event data
         ...eventData,
         // Added report fields defaults
-        tipoObra: eventData.tipoObra || '',
-        trabajosEnCurso: eventData.trabajosEnCurso || '',
+        tipoObra: eventData.tipoObra || eventData.tipo_obra || '',
+        trabajosEnCurso: eventData.trabajosEnCurso || eventData.trabajos_en_curso || '',
         ubicacion: eventData.ubicacion || '',
-        recursoPreventivo: eventData.recursoPreventivo || '',
-        nTrabajadores: eventData.nTrabajadores || '',
+        recursoPreventivo: eventData.recursoPreventivo || eventData.recurso_preventivo || '',
+        nTrabajadores: eventData.nTrabajadores || eventData.n_trabajadores || '',
         subcontratas: eventData.subcontratas || '', // Will auto-fill if empty below
-        unidadesEjecucion: eventData.unidadesEjecucion || '',
+        unidadesEjecucion: eventData.unidadesEjecucion || eventData.unidades_ejecucion || '',
         epis: eventData.epis || '',
-        mediosAuxiliares: eventData.mediosAuxiliares || '',
-        instalacionElectrica: eventData.instalacionElectrica || '',
-        condicionesAmbientales: eventData.condicionesAmbientales || '',
-        organizacionObra: eventData.organizacionObra || '',
+        mediosAuxiliares: eventData.mediosAuxiliares || eventData.medios_auxiliares || '',
+        instalacionElectrica: eventData.instalacionElectrica || eventData.instalacion_electrica || '',
+        condicionesAmbientales: eventData.condicionesAmbientales || eventData.condiciones_ambientales || '',
+        organizacionObra: eventData.organizacionObra || eventData.organizacion_obra || '',
         coordenadas: eventData.coordenadas || '',
-        fechaHora: eventData.fechaHora || eventData.start || '',
+        fechaHora: eventData.fechaHora || eventData.fecha_hora || eventData.start || eventData.fecha_planificada || '',
         recordatorio: eventData.recordatorio || '',
-        desarrolloReunion: eventData.desarrolloReunion || '',
-        planificacionTrabajos: eventData.planificacionTrabajos || '',
+        desarrolloReunion: eventData.desarrolloReunion || eventData.desarrollo_reunion || '',
+        planificacionTrabajos: eventData.planificacionTrabajos || eventData.planificacion_trabajos || '',
         observaciones: eventData.observaciones || '',
         accidentes: eventData.accidentes || '',
         fotos: eventData.fotos || [], // Array of base64 images
@@ -45,8 +47,8 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         // New Reunion fields
         introduccion: eventData.introduccion || '',
         asistentes: eventData.asistentes || '',
-        esReunionPuntual: eventData.esReunionPuntual || false,
-        ordenDelDia: eventData.ordenDelDia || `- Lectura del acta o conclusiones de la reunión anterior
+        esReunionPuntual: eventData.esReunionPuntual !== undefined ? (eventData.esReunionPuntual === true || eventData.esReunionPuntual === 'true') : (eventData.es_reunion_puntual === true),
+        ordenDelDia: eventData.ordenDelDia || eventData.orden_del_dia || `- Lectura del acta o conclusiones de la reunión anterior
 - Situación de la documentación que debe aportarse por las empresas implicadas en la obra.
 - Accidentes e incidentes ocurridos en la obra desde la reunión anterior.
 - Planificación de trabajos para el próximo período. Detectar contradicciones, interferencias e incompatibilidades entre empresas y medidas a adoptar.
@@ -69,119 +71,48 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
 
-    const handleGeneratePdf = () => {
+    const hasPersistedActa = (data: any) =>
+        Array.isArray(data?.adjuntos) &&
+        data.adjuntos.some((a: any) => a?.name === ACTA_MARKER);
+    const visibleAdjuntos = (Array.isArray(formData?.adjuntos) ? formData.adjuntos : []).filter((a: any) => a?.name !== ACTA_MARKER);
+
+    const handleGeneratePdf = async () => {
         setIsGeneratingPdf(true);
         setGeneratedPdfUrl(null);
-        // Simulate network delay for PDF generation
-        setTimeout(() => {
-            // HTML content to simulate the PDF based on formData
-            const htmlContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Acta ${eventData.title}</title>
-                    <style>
-                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
-                        .header { text-align: center; border-bottom: 2px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }
-                        h1 { color: #1e3a8a; margin: 0; }
-                        h2 { color: #2563eb; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-top: 30px; }
-                        p { margin: 5px 0; }
-                        .section { margin-bottom: 20px; }
-                        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-                        .label { font-weight: bold; color: #4b5563; }
-                        .signatures { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 40px; }
-                        .signature-box { border: 1px solid #d1d5db; padding: 15px; text-align: center; border-radius: 8px; }
-                        .signature-img { max-width: 150px; max-height: 80px; margin-top: 10px; }
-                        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 8rem; color: rgba(0,0,0,0.05); z-index: -1; pointer-events: none; }
-                    </style>
-                </head>
-                <body>
-                    <div class="watermark">ACTA SIMULADA</div>
-                    <div class="header">
-                        <h1>Acta de ${tipo === 'reunion' ? 'Reunión' : 'Visita'}</h1>
-                        <p style="color: #6b7280; font-size: 1.2rem;">${obra.denominacion}</p>
-                    </div>
 
-                    ${tipo === 'reunion' ? `
-                    <div class="section">
-                        <h2>Introducción</h2>
-                        <p>${formData.introduccion?.replace(/\\n/g, '<br>') || 'No especificada.'}</p>
-                    </div>
-                    <div class="section">
-                        <h2>Asistentes</h2>
-                        <p>${formData.asistentes?.replace(/\\n/g, '<br>') || 'No especificados.'}</p>
-                    </div>
-                    <div class="section">
-                        <h2>Desarrollo de la reunión</h2>
-                        <p>${formData.desarrolloReunion?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
-                    </div>
-                    ${!formData.esReunionPuntual ? `
-                    <div class="section">
-                        <h2>Orden del Día</h2>
-                        <p>${formData.ordenDelDia?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
-                    </div>
-                    ` : ''}
-                    ` : `
-                    <div class="grid">
-                        <div class="section">
-                            <p><span class="label">Expediente:</span> ${obra.expediente || '-'}</p>
-                            <p><span class="label">Fecha y Hora:</span> ${formData.fechaHora || '-'}</p>
-                            <p><span class="label">Ubicación:</span> ${formData.ubicacion || '-'}</p>
-                        </div>
-                        <div class="section">
-                            <p><span class="label">Tipo de Obra:</span> ${formData.tipoObra || '-'}</p>
-                            <p><span class="label">Recurso Preventivo:</span> ${formData.recursoPreventivo || '-'}</p>
-                            <p><span class="label">Nº Trabajadores (aprox):</span> ${formData.nTrabajadores || '-'}</p>
-                        </div>
-                    </div>
-
-                    <div class="section">
-                        <h2>Trabajos en Curso</h2>
-                        <p>${formData.trabajosEnCurso?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
-                    </div>
-
-                    <div class="section">
-                        <h2>Subcontratas / Autónomos</h2>
-                        <p>${formData.subcontratas?.replace(/\\n/g, '<br>') || 'No especificado.'}</p>
-                    </div>
-
-                    <div class="section">
-                        <h2>Observaciones y Medidas</h2>
-                        <p>${formData.observaciones?.replace(/\\n/g, '<br>') || 'No hay observaciones adicionales.'}</p>
-                    </div>
-                    `}
-
-                    ${(formData.firmas && formData.firmas.length > 0) ? `
-                        <h2>${tipo === 'reunion' ? 'Firmas de Asistentes' : 'Asistentes y Firmas'}</h2>
-                        <div class="signatures">
-                            ${formData.firmas.map((f: any) => `
-                                <div class="signature-box">
-                                    <p style="margin:0; font-weight: bold;">${f.nombre}</p>
-                                    <p style="margin:0; font-size: 0.8rem; color: #666;">${f.empresa || ''}</p>
-                                    <img src="${f.url}" class="signature-img" />
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : '<p><i>No hay firmas registradas en este informe.</i></p>'}
-                </body>
-                </html>
-            `;
-
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
+        try {
+            const url = await createActaPdfUrl(tipo, formData, obra);
             setGeneratedPdfUrl(url);
+
+            const markerAdjunto = { id: 'acta-marker', name: ACTA_MARKER, size: 0, type: 'marker', dataUrl: '' };
+            const nextAdjuntos = Array.isArray(formData.adjuntos) ? [...formData.adjuntos] : [];
+            if (!nextAdjuntos.some((a: any) => a?.name === ACTA_MARKER)) {
+                nextAdjuntos.push(markerAdjunto);
+            }
+
+            const enriched = {
+                ...formData,
+                adjuntos: nextAdjuntos,
+                actaGenerada: true,
+                actaGeneradaAt: new Date().toISOString(),
+                __keepOpen: true,
+            };
+            setFormData(enriched);
+            await Promise.resolve(onSave(eventData.id || eventData.fallbackId, enriched));
+        } catch (err: any) {
+            console.error("Error generating PDF:", err);
+            alert("Hubo un error al generar el PDF. Revisa que los datos introducidos sean correctos.");
+        } finally {
             setIsGeneratingPdf(false);
-        }, 2000); // 2 seconds delay
+        }
     };
 
-    // Auto-calculate Subcontratas based on Libro de Subcontratación if empty
+    // Auto-calculate Subcontratas based on Libro de Subcontratacion if empty
     useEffect(() => {
         if (!formData.subcontratas) {
             const libro = getLibroSubcontratas(obra.id);
             if (libro && libro.length > 0) {
                 const names = libro.map((l: any) => formatAgentName(l.subcontrataId, 'empresa'));
-                // Make unique and join with line breaks
                 const uniqueNames = Array.from(new Set(names)).filter(n => n !== 'Desconocido');
                 setFormData((prev: any) => ({ ...prev, subcontratas: uniqueNames.join('\n') }));
             }
@@ -261,8 +192,14 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         }));
     };
 
-    const handleSave = () => {
-        onSave(eventData.id || eventData.fallbackId, formData);
+    const handleSave = async () => {
+        try {
+            await Promise.resolve(onSave(eventData.id || eventData.fallbackId, formData));
+            alert('Los cambios se han guardado correctamente.');
+        } catch (error) {
+            console.error('Error saving event report:', error);
+            alert('No se pudieron guardar los cambios.');
+        }
     };
 
     // --- Signature Pad Logic ---
@@ -372,15 +309,23 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                     </button>
                     <div>
                         <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-primary-dark)', fontWeight: 600 }}>
-                            Informe: {eventData.title}
+                            Informe: {formData.titulo || formData.title || eventData.titulo || eventData.title || 'Sin título'}
                         </h2>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Módulo de reportes y actas</p>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    {generatedPdfUrl && !isGeneratingPdf && (
+                    {(generatedPdfUrl || hasPersistedActa(formData)) && !isGeneratingPdf && (
                         <Button
-                            onClick={() => window.open(generatedPdfUrl, '_blank')}
+                            onClick={async () => {
+                                if (generatedPdfUrl) {
+                                    window.open(generatedPdfUrl, '_blank');
+                                    return;
+                                }
+                                const url = await createActaPdfUrl(tipo, formData, obra);
+                                setGeneratedPdfUrl(url);
+                                window.open(url, '_blank');
+                            }}
                             style={{ backgroundColor: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
                             className="hover:bg-emerald-600"
                         >
@@ -789,7 +734,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                         backgroundColor: isDragActiveAdjuntos ? 'var(--color-surface-hover)' : 'var(--color-surface)',
                                         cursor: 'pointer',
                                         transition: 'all var(--transition-fast)',
-                                        marginBottom: formData.adjuntos && formData.adjuntos.length > 0 ? '1rem' : '0'
+                                        marginBottom: visibleAdjuntos.length > 0 ? '1rem' : '0'
                                     }}
                                 >
                                     <input {...getInputPropsAdjuntos()} />
@@ -799,9 +744,9 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                     </p>
                                 </div>
 
-                                {formData.adjuntos && formData.adjuntos.length > 0 && (
+                                {visibleAdjuntos.length > 0 && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {formData.adjuntos.map((file: any) => (
+                                        {visibleAdjuntos.map((file: any) => (
                                             <div key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
                                                     <div style={{ padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>

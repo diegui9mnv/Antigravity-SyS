@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { saveObra, updateObra, getEmpresas, getPersonas, saveEmpresa, savePersona, typologiesTree } from '../store';
+import { typologiesTree } from '../store';
 import { Button, MultiSelect } from './ui';
 import { X } from 'lucide-react';
 import { EmpresaModal, PersonaModal } from './ContactModals';
+import { createObra, updateObra, getObraWithRelations } from '../lib/api/obras';
+import { getEmpresas, createEmpresa, type Empresa } from '../lib/api/agenda';
+import { getPersonas, createPersona, type Persona } from '../lib/api/agenda';
 
 interface CreateProjectModalProps {
     onClose: () => void;
@@ -11,8 +14,8 @@ interface CreateProjectModalProps {
 }
 
 export default function CreateProjectModal({ onClose, onCreated, initialData }: CreateProjectModalProps) {
-    const [empresas, setEmpresas] = useState<any[]>([]);
-    const [personas, setPersonas] = useState<any[]>([]);
+    const [empresas, setEmpresas] = useState<Empresa[]>([]);
+    const [personas, setPersonas] = useState<Persona[]>([]);
 
     // Quick Add Agent State
     const [quickAddType, setQuickAddType] = useState<{ type: 'empresa' | 'persona', field: string } | null>(null);
@@ -39,30 +42,48 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
     });
 
     useEffect(() => {
-        setEmpresas(getEmpresas());
-        setPersonas(getPersonas());
+        const loadAgenda = async () => {
+            setEmpresas(await getEmpresas());
+            setPersonas(await getPersonas());
+        };
+        loadAgenda();
 
         if (initialData) {
-            setFormData({
-                tipologiaCat: initialData.tipologiaCat || '',
-                tipologiaSub: initialData.tipologiaSub || '',
-                tipologiaTipo: initialData.tipologiaTipo || '',
+            // Carga inicial rápida de la tabla principal
+            setFormData(prev => ({
+                ...prev,
+                tipologiaCat: initialData.tipologia_cat || '',
+                tipologiaSub: initialData.tipologia_sub || '',
+                tipologiaTipo: initialData.tipologia_tipo || '',
                 denominacion: initialData.denominacion || '',
                 municipio: initialData.municipio || '',
                 expediente: initialData.expediente || '',
                 cebe: initialData.cebe || '',
-                codigoObra: initialData.codigoObra || '',
+                codigoObra: initialData.codigo_obra || '',
                 estado: initialData.estado || 'solicitud',
-                fechaInicio: initialData.fechaInicio || '',
-                duracionNum: initialData.duracionNum || '',
-                duracionUnidad: initialData.duracionUnidad || 'meses',
-                fechaFin: initialData.fechaFin || '',
-                contratistaId: Array.isArray(initialData.contratistaId) ? initialData.contratistaId : (initialData.contratistaId ? [initialData.contratistaId] : []),
-                promotorId: Array.isArray(initialData.promotorId) ? initialData.promotorId : (initialData.promotorId ? [initialData.promotorId] : []),
-                coordinadorSysId: Array.isArray(initialData.coordinadorSysId) ? initialData.coordinadorSysId : (initialData.coordinadorSysId ? [initialData.coordinadorSysId] : []),
-                directorObraId: Array.isArray(initialData.directorObraId) ? initialData.directorObraId : (initialData.directorObraId ? [initialData.directorObraId] : []),
-                jefeObraId: Array.isArray(initialData.jefeObraId) ? initialData.jefeObraId : (initialData.jefeObraId ? [initialData.jefeObraId] : [])
-            });
+                fechaInicio: initialData.fecha_inicio || '',
+                duracionNum: initialData.duracion_num?.toString() || '',
+                duracionUnidad: initialData.duracion_unidad || 'meses',
+                fechaFin: initialData.fecha_fin || ''
+            }));
+
+            // Carga asíncrona de relaciones Many-to-Many
+            const loadRelations = async () => {
+                try {
+                    const fullData = await getObraWithRelations(initialData.id);
+                    setFormData(prev => ({
+                        ...prev,
+                        contratistaId: fullData.contratista_ids || [],
+                        promotorId: fullData.promotor_ids || [],
+                        coordinadorSysId: fullData.coordinador_sys_ids || [],
+                        directorObraId: fullData.director_obra_ids || [],
+                        jefeObraId: fullData.jefe_obra_ids || []
+                    }));
+                } catch (e) {
+                    console.error('Error fetching relations:', e);
+                }
+            };
+            loadRelations();
         }
     }, [initialData]);
 
@@ -95,53 +116,78 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
         }
     }, [formData.fechaInicio, formData.duracionNum, formData.duracionUnidad]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Include full typology path as a single string for convenience
         const fullTypology = [formData.tipologiaCat, formData.tipologiaSub, formData.tipologiaTipo].filter(Boolean).join(' > ');
 
-        const finalData = {
-            ...formData,
-            tipologia: fullTypology
+        const baseObra = {
+            tipologia_cat: formData.tipologiaCat || null,
+            tipologia_sub: formData.tipologiaSub || null,
+            tipologia_tipo: formData.tipologiaTipo || null,
+            tipologia: fullTypology || null,
+            denominacion: formData.denominacion,
+            municipio: formData.municipio || null,
+            expediente: formData.expediente || null,
+            cebe: formData.cebe || null,
+            codigo_obra: formData.codigoObra || null,
+            estado: formData.estado,
+            fecha_inicio: formData.fechaInicio || null,
+            duracion_num: parseInt(formData.duracionNum) || null,
+            duracion_unidad: formData.duracionUnidad || null,
+            fecha_fin: formData.fechaFin || null
         };
 
-        if (initialData) {
-            updateObra(initialData.id, finalData);
-        } else {
-            const newObra = {
-                ...finalData,
-                id: `ob-${Date.now()}`
-            };
-            saveObra(newObra);
+        const relations = {
+            contratistaId: formData.contratistaId,
+            promotorId: formData.promotorId,
+            coordinadorSysId: formData.coordinadorSysId,
+            directorObraId: formData.directorObraId,
+            jefeObraId: formData.jefeObraId
+        };
+
+        try {
+            if (initialData) {
+                await updateObra(initialData.id, baseObra, relations);
+            } else {
+                await createObra(baseObra, relations);
+            }
+            onCreated();
+        } catch (error) {
+            alert('Error al guardar la obra');
         }
-        onCreated();
     };
 
-    const handleQuickAddPersona = (data: any) => {
-        const newId = `per-${Date.now()}`;
-        savePersona({ id: newId, ...data });
-        setPersonas(getPersonas());
-        if (quickAddType) {
-            setFormData(prev => ({
-                ...prev,
-                [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newId]
-            }));
+    const handleQuickAddPersona = async (data: any) => {
+        try {
+            const newPersona = await createPersona(data);
+            setPersonas(await getPersonas());
+            if (quickAddType) {
+                setFormData(prev => ({
+                    ...prev,
+                    [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newPersona.id]
+                }));
+            }
+            setQuickAddType(null);
+        } catch (error) {
+            alert('Error al crear persona');
         }
-        setQuickAddType(null);
     };
 
-    const handleQuickAddEmpresa = (data: any) => {
-        const newId = `emp-${Date.now()}`;
-        saveEmpresa({ id: newId, ...data });
-        setEmpresas(getEmpresas());
-        if (quickAddType) {
-            setFormData(prev => ({
-                ...prev,
-                [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newId]
-            }));
+    const handleQuickAddEmpresa = async (data: any) => {
+        try {
+            const newEmp = await createEmpresa(data);
+            setEmpresas(await getEmpresas());
+            if (quickAddType) {
+                setFormData(prev => ({
+                    ...prev,
+                    [quickAddType.field]: [...(prev[quickAddType.field as keyof typeof prev] as string[]), newEmp.id]
+                }));
+            }
+            setQuickAddType(null);
+        } catch (error) {
+            alert('Error al crear empresa');
         }
-        setQuickAddType(null);
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -267,7 +313,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                 <div className="input-group">
                                     <label className="input-label">Contratista (Empresa)</label>
                                     <MultiSelect
-                                        options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
+                                        options={empresas.map(e => ({ value: e.id, label: e.razon_social }))}
                                         value={formData.contratistaId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, contratistaId: val }))}
                                         placeholder="Seleccionar..."
@@ -277,7 +323,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                 <div className="input-group">
                                     <label className="input-label">Promotor (Empresa)</label>
                                     <MultiSelect
-                                        options={empresas.map(e => ({ value: e.id, label: e.razonSocial }))}
+                                        options={empresas.map(e => ({ value: e.id, label: e.razon_social }))}
                                         value={formData.promotorId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, promotorId: val }))}
                                         placeholder="Seleccionar..."
