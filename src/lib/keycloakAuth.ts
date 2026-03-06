@@ -47,18 +47,7 @@ const createKeycloakClient = (): KeycloakInstance => {
 
 export const getAuthProvider = (): AuthProvider => {
     const provider = (import.meta.env.VITE_AUTH_PROVIDER || 'local').toLowerCase();
-    if (provider !== 'keycloak') return 'local';
-
-    const url = (import.meta.env.VITE_KEYCLOAK_URL || '').trim();
-    const realm = (import.meta.env.VITE_KEYCLOAK_REALM || '').trim();
-    const clientId = (import.meta.env.VITE_KEYCLOAK_CLIENT_ID || '').trim();
-
-    if (!url || !realm || !clientId) {
-        console.warn('Keycloak desactivado: faltan variables de entorno. Se usa auth local.');
-        return 'local';
-    }
-
-    return 'keycloak';
+    return provider === 'keycloak' ? 'keycloak' : 'local';
 };
 
 export const getLocalSession = (): AuthSession | null => {
