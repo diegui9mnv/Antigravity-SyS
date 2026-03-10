@@ -1,9 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Users, Mail, Building2, Plus, Edit2, Trash2 } from 'lucide-react';
 import { Card, Button, Badge } from '../components/ui';
 import { getUsuarios, saveUsuario, updateUsuario, deleteUsuario } from '../store';
 import { getEmpresas, createEmpresa, type Empresa } from '../lib/api/agenda';
 import { EmpresaModal } from '../components/ContactModals';
+
+type UserFormData = {
+    nombre: string;
+    email: string;
+    tipo: string;
+    empresaId: string;
+};
+
+const EMPTY_FORM: UserFormData = {
+    nombre: '',
+    email: '',
+    tipo: 'CEMOSA',
+    empresaId: ''
+};
 
 export default function UsersList() {
     const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -11,11 +25,7 @@ export default function UsersList() {
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<any>(null);
-
-    // Form state
-    const [formData, setFormData] = useState({
-        nombre: '', email: '', tipo: 'CEMOSA', empresaId: ''
-    });
+    const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
 
     const loadData = async () => {
         setUsuarios(getUsuarios());
@@ -31,33 +41,43 @@ export default function UsersList() {
         loadData();
     }, []);
 
-    const handleSaveUser = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSaveUser = (event: React.FormEvent) => {
+        event.preventDefault();
+
         if (editingUser) {
-            updateUsuario(editingUser.id, formData);
+            updateUsuario(editingUser.id, {
+                nombre: formData.nombre,
+                email: formData.email,
+                tipo: formData.tipo,
+                empresaId: formData.empresaId
+            });
         } else {
-            saveUsuario({ ...formData, id: `usr-${Date.now()}` });
+            saveUsuario({
+                ...formData,
+                id: `usr-${Date.now()}`
+            });
         }
+
         setIsUserModalOpen(false);
         setEditingUser(null);
-        setFormData({ nombre: '', email: '', tipo: 'CEMOSA', empresaId: '' });
+        setFormData(EMPTY_FORM);
         loadData();
     };
 
-    const handleEdit = (u: any) => {
-        setEditingUser(u);
+    const handleEdit = (usuario: any) => {
+        setEditingUser(usuario);
         setFormData({
-            nombre: u.nombre || '',
-            email: u.email || '',
-            tipo: u.tipo || 'CEMOSA',
-            empresaId: u.empresaId || ''
+            nombre: usuario.nombre || '',
+            email: usuario.email || '',
+            tipo: usuario.tipo || 'CEMOSA',
+            empresaId: usuario.empresaId || ''
         });
         setIsUserModalOpen(false);
         setIsUserModalOpen(true);
     };
 
     const handleDelete = (id: string) => {
-        if (window.confirm("¿Estás seguro de que deseas eliminar este usuario?")) {
+        if (window.confirm('Estas seguro de que deseas eliminar este usuario?')) {
             deleteUsuario(id);
             loadData();
         }
@@ -67,9 +87,10 @@ export default function UsersList() {
         try {
             const newEmp = await createEmpresa(data);
             setIsEmpresaModalOpen(false);
-            loadData();
-            setFormData(prev => ({ ...prev, empresaId: newEmp.id }));
+            await loadData();
+            setFormData((prev) => ({ ...prev, empresaId: newEmp.id }));
         } catch (error) {
+            console.error(error);
             alert('Error al crear la empresa');
         }
     };
@@ -80,13 +101,15 @@ export default function UsersList() {
                 <div>
                     <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>
                         <Users className="text-primary" size={32} />
-                        Gestión de Usuarios
+                        Gestion de Usuarios
                     </h1>
-                    <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>Administra los accesos de usuarios de CEMOSA y externos</p>
+                    <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem', marginBottom: 0 }}>
+                        Administra los accesos de usuarios de CEMOSA y externos
+                    </p>
                 </div>
                 <Button onClick={() => {
                     setEditingUser(null);
-                    setFormData({ nombre: '', email: '', tipo: 'CEMOSA', empresaId: '' });
+                    setFormData(EMPTY_FORM);
                     setIsUserModalOpen(true);
                 }}>
                     <Plus size={18} /> Nuevo Usuario
@@ -112,7 +135,7 @@ export default function UsersList() {
                                         No hay usuarios registrados
                                     </td>
                                 </tr>
-                            ) : usuarios.map(u => (
+                            ) : usuarios.map((u) => (
                                 <tr key={u.id}>
                                     <td>
                                         <div style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>{u.nombre}</div>
@@ -128,7 +151,7 @@ export default function UsersList() {
                                     <td>
                                         {u.tipo === 'Externo' && u.empresaId ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '0.875rem' }}>
-                                                <Building2 size={14} /> {empresas.find(e => e.id === u.empresaId)?.razon_social || 'Desconocida'}
+                                                <Building2 size={14} /> {empresas.find((e) => e.id === u.empresaId)?.razon_social || 'Desconocida'}
                                             </div>
                                         ) : (
                                             <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>-</span>
@@ -153,31 +176,53 @@ export default function UsersList() {
 
             {isUserModalOpen && (
                 <div className="modal-overlay" style={{
-                    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 60,
                     padding: '1rem'
                 }}>
                     <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '500px' }}>
                         <div className="card-header flex justify-between items-center">
                             <h2 style={{ fontSize: '1.25rem', margin: 0 }}>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
-                            <button onClick={() => setIsUserModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                            <button onClick={() => setIsUserModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>x</button>
                         </div>
                         <form onSubmit={handleSaveUser}>
                             <div className="card-body" style={{ display: 'grid', gap: '1rem' }}>
                                 <div className="input-group">
                                     <label className="input-label">Nombre Completo</label>
-                                    <input required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} className="input-field" placeholder="Ej. Ana Sánchez" />
+                                    <input
+                                        required
+                                        value={formData.nombre}
+                                        onChange={(event) => setFormData({ ...formData, nombre: event.target.value })}
+                                        className="input-field"
+                                        placeholder="Ej. Ana Sanchez"
+                                    />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Correo Electrónico</label>
-                                    <input required type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="input-field" placeholder="ejemplo@correo.com" />
+                                    <label className="input-label">Correo Electronico</label>
+                                    <input
+                                        required
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(event) => setFormData({ ...formData, email: event.target.value })}
+                                        className="input-field"
+                                        placeholder="ejemplo@correo.com"
+                                    />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Tipo de Usuario</label>
                                     <select
                                         required
                                         value={formData.tipo}
-                                        onChange={e => setFormData({ ...formData, tipo: e.target.value, empresaId: e.target.value === 'CEMOSA' ? '' : formData.empresaId })}
+                                        onChange={(event) => setFormData({
+                                            ...formData,
+                                            tipo: event.target.value,
+                                            empresaId: event.target.value === 'CEMOSA' ? '' : formData.empresaId
+                                        })}
                                         className="input-field"
                                         style={{ backgroundColor: 'white' }}
                                     >
@@ -193,12 +238,12 @@ export default function UsersList() {
                                             <select
                                                 required={formData.tipo === 'Externo'}
                                                 value={formData.empresaId}
-                                                onChange={e => setFormData({ ...formData, empresaId: e.target.value })}
+                                                onChange={(event) => setFormData({ ...formData, empresaId: event.target.value })}
                                                 className="input-field"
                                                 style={{ backgroundColor: 'white', flex: 1 }}
                                             >
                                                 <option value="" disabled>Seleccionar Empresa...</option>
-                                                {empresas.map((emp: Empresa) => (
+                                                {empresas.map((emp) => (
                                                     <option key={emp.id} value={emp.id}>{emp.razon_social}</option>
                                                 ))}
                                             </select>

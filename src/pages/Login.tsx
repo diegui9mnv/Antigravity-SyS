@@ -1,125 +1,159 @@
-import { Building2, ShieldCheck, User } from 'lucide-react';
-import type { AppRole } from '../lib/keycloakAuth';
+import { useState } from 'react';
+import { LockKeyhole, Mail } from 'lucide-react';
 
-export default function Login({ onLogin }: { onLogin: (role: AppRole) => void }) {
-    return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '100vh',
-            backgroundColor: '#f8fafc',
-            fontFamily: 'Inter, system-ui, sans-serif'
-        }}>
-            <div style={{
-                backgroundColor: 'white',
-                borderRadius: '1rem',
-                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                overflow: 'hidden',
-                width: '100%',
-                maxWidth: '760px',
-                textAlign: 'center'
-            }}>
-                <div style={{ width: '100%', height: '300px', backgroundColor: '#e2e8f0', position: 'relative' }}>
-                    <img
-                        src="/welcome-bg.png"
-                        alt="Bienvenido a CEMOSA - Grupo Privado Seguridad y Salud"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: 'white' }}
-                        onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            target.parentElement!.innerHTML = `
-                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #0052cc 0%, #003d99 100%); color: white;">
-                                    <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Cemosa</h1>
-                                    <p style="font-size: 1.25rem; opacity: 0.9;">Seguridad y Salud - Grupo Privado</p>
-                                    <p style="font-size: 0.8rem; margin-top: 2rem; opacity: 0.7;">(Coloca 'welcome-bg.png' en la carpeta public)</p>
-                                </div>
-                            `;
-                        }}
-                    />
-                </div>
+type LoginProps = {
+  onLogin: (email: string, password: string) => Promise<string | null>;
+};
 
-                <div style={{ padding: '3rem 2rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', color: '#1e293b', marginBottom: '0.5rem', fontWeight: 600 }}>Bienvenido</h2>
-                    <p style={{ color: '#64748b', marginBottom: '0.5rem' }}>Selecciona tu perfil para acceder a la plataforma</p>
-                    <p style={{ color: '#94a3b8', marginBottom: '2.5rem', fontSize: '0.85rem' }}>Modo local de pruebas (sin Keycloak)</p>
+export default function Login({ onLogin }: LoginProps) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
-                        <button
-                            onClick={() => onLogin('admin')}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '1rem',
-                                padding: '2rem 1rem',
-                                backgroundColor: '#eff6ff',
-                                border: '2px solid #bfdbfe',
-                                borderRadius: '0.75rem',
-                                color: '#1d4ed8',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                fontWeight: 500,
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
-                        >
-                            <ShieldCheck size={32} />
-                            Entrar como Admin
-                        </button>
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
 
-                        <button
-                            onClick={() => onLogin('cemosa')}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '1rem',
-                                padding: '2rem 1rem',
-                                backgroundColor: '#f0fdf4',
-                                border: '2px solid #bbf7d0',
-                                borderRadius: '0.75rem',
-                                color: '#166534',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                fontWeight: 500,
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dcfce7'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'}
-                        >
-                            <Building2 size={32} />
-                            Entrar como CEMOSA
-                        </button>
+    const loginError = await onLogin(email, password);
+    if (loginError) {
+      setError(loginError);
+    }
 
-                        <button
-                            onClick={() => onLogin('externo')}
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '1rem',
-                                padding: '2rem 1rem',
-                                backgroundColor: '#fffedd',
-                                border: '2px solid #fef08a',
-                                borderRadius: '0.75rem',
-                                color: '#854d0e',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                fontWeight: 500,
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#fef9c3'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fffedd'}
-                        >
-                            <User size={32} />
-                            Entrar como Externo
-                        </button>
-                    </div>
-                </div>
-            </div>
+    setIsSubmitting(false);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#f8fafc',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '1rem'
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '1rem',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+          overflow: 'hidden',
+          width: '100%',
+          maxWidth: '520px'
+        }}
+      >
+        <div style={{ width: '100%', height: '220px', backgroundColor: '#e2e8f0', position: 'relative' }}>
+          <img
+            src="/welcome-bg.png"
+            alt="Bienvenido a CEMOSA - Grupo Privado Seguridad y Salud"
+            style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: 'white' }}
+          />
         </div>
-    );
+
+        <form onSubmit={handleSubmit} style={{ padding: '2rem' }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#1e293b', marginBottom: '0.5rem', fontWeight: 600, textAlign: 'center' }}>
+            Iniciar sesion
+          </h2>
+          <p style={{ color: '#64748b', marginBottom: '1.5rem', textAlign: 'center' }}>
+            Accede con tu correo y contrasena
+          </p>
+
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', color: '#334155', marginBottom: '0.5rem', fontWeight: 500 }}>
+                Correo electronico
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Mail
+                  size={16}
+                  style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}
+                />
+                <input
+                  required
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  disabled={isSubmitting}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="usuario@correo.com"
+                  style={{
+                    width: '100%',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '0.625rem',
+                    padding: '0.7rem 0.75rem 0.7rem 2.4rem',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.875rem', color: '#334155', marginBottom: '0.5rem', fontWeight: 500 }}>
+                Contrasena
+              </label>
+              <div style={{ position: 'relative' }}>
+                <LockKeyhole
+                  size={16}
+                  style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}
+                />
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  disabled={isSubmitting}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Tu contrasena"
+                  style={{
+                    width: '100%',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '0.625rem',
+                    padding: '0.7rem 0.75rem 0.7rem 2.4rem',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div
+                style={{
+                  color: '#b91c1c',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '0.625rem',
+                  padding: '0.6rem 0.75rem',
+                  fontSize: '0.875rem'
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                border: 'none',
+                borderRadius: '0.625rem',
+                padding: '0.75rem 1rem',
+                backgroundColor: '#166534',
+                color: 'white',
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.75 : 1
+              }}
+            >
+              {isSubmitting ? 'Entrando...' : 'Entrar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }

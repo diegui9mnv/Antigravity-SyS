@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Waves } from 'lucide-react';
@@ -10,25 +10,15 @@ import Agenda from './pages/Agenda';
 import UsersList from './pages/UsersList';
 import Plantillas from './pages/Plantillas';
 import Login from './pages/Login';
-import {
-  clearLocalRole,
-  getAuthProvider,
-  getLocalSession,
-  initKeycloakSession,
-  logoutKeycloak,
-  saveLocalRole,
-  startKeycloakRefresh,
-  type AppRole,
-  type AuthSession
-} from './lib/keycloakAuth';
+import { getSupabaseSession, loginWithEmailPassword, logoutSupabase, onAuthStateChange, type AuthSession } from './lib/auth';
 
 const AppLayout = ({ children, session, onLogout }: { children: ReactNode; session: AuthSession; onLogout: () => void }) => {
   const location = useLocation();
   const isFluid = location.pathname.startsWith('/obra/');
   const containerClass = isFluid ? 'container-fluid' : 'container';
 
-  const canManage = session.role === 'admin' || session.role === 'cemosa';
-  const canUsers = session.role === 'admin' || session.role === 'cemosa';
+  const canManage = session.role === 'cemosa';
+  const canUsers = session.role === 'cemosa';
 
   return (
     <div className="app-layout">
@@ -66,98 +56,74 @@ const AppLayout = ({ children, session, onLogout }: { children: ReactNode; sessi
 };
 
 function App() {
-  const authProvider = useMemo(() => getAuthProvider(), []);
-  const [session, setSession] = useState<AuthSession | null>(() => (authProvider === 'local' ? getLocalSession() : null));
-  const [authLoading, setAuthLoading] = useState<boolean>(authProvider === 'keycloak');
-  const [authError, setAuthError] = useState<string | null>(null);
-  const refreshTimerRef = useRef<number | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    if (authProvider !== 'keycloak') {
-      setAuthLoading(false);
-      return;
-    }
-
     let mounted = true;
+
     const initAuth = async () => {
-      setAuthLoading(true);
-      setAuthError(null);
       try {
-        const keycloakSession = await initKeycloakSession();
-        if (!mounted) return;
-        setSession(keycloakSession);
-        if (keycloakSession.keycloak) {
-          refreshTimerRef.current = startKeycloakRefresh(keycloakSession.keycloak);
+        const initialSession = await getSupabaseSession();
+        if (mounted) {
+          setSession(initialSession);
         }
       } catch (error) {
-        console.error(error);
+        console.error('Error cargando sesion de Supabase:', error);
         if (mounted) {
-          const message = error instanceof Error ? error.message : 'Error inicializando Keycloak.';
-          setAuthError(message);
           setSession(null);
         }
       } finally {
-        if (mounted) setAuthLoading(false);
+        if (mounted) {
+          setAuthLoading(false);
+        }
       }
     };
 
     initAuth();
 
+    const unsubscribe = onAuthStateChange((nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
     return () => {
       mounted = false;
-      if (refreshTimerRef.current) {
-        window.clearInterval(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
+      unsubscribe();
     };
-  }, [authProvider]);
+  }, []);
 
-  const handleLocalLogin = (role: AppRole) => {
-    saveLocalRole(role);
-    setSession({
-      role,
-      displayName: role.toUpperCase(),
-      provider: 'local'
-    });
+  const handleLogin = async (email: string, password: string): Promise<string | null> => {
+    const { session: nextSession, error } = await loginWithEmailPassword(email, password);
+    if (error) return error;
+    setSession(nextSession);
+    return null;
   };
 
   const handleLogout = async () => {
     try {
-      if (session?.provider === 'keycloak' && session.keycloak) {
-        await logoutKeycloak(session.keycloak);
-        return;
-      }
+      await logoutSupabase();
     } catch (error) {
-      console.error('Error al cerrar sesión en Keycloak:', error);
+      console.error('Error cerrando sesion en Supabase:', error);
+    } finally {
+      setSession(null);
     }
-
-    clearLocalRole();
-    setSession(null);
   };
 
   if (authLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-        Iniciando autenticación...
+        Iniciando sesion...
       </div>
     );
   }
 
   if (!session) {
-    if (authProvider === 'keycloak') {
-      return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '1rem' }}>
-          <h2 style={{ margin: 0 }}>Error de autenticación Keycloak</h2>
-          <p style={{ margin: 0, color: 'var(--text-muted)' }}>{authError || 'No se pudo autenticar.'}</p>
-          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reintentar</button>
-        </div>
-      );
-    }
-    return <Login onLogin={handleLocalLogin} />;
+    return <Login onLogin={handleLogin} />;
   }
 
-  const canManage = session.role === 'admin' || session.role === 'cemosa';
-  const canUsers = session.role === 'admin' || session.role === 'cemosa';
+  const canManage = session.role === 'cemosa';
+  const canUsers = session.role === 'cemosa';
 
   return (
     <BrowserRouter>
@@ -177,4 +143,3 @@ function App() {
 }
 
 export default App;
-
