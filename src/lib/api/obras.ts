@@ -31,6 +31,18 @@ export const updateObraAgentes = async (id: string, agentes: any[]): Promise<voi
     }
 };
 
+export const updateObraFields = async (id: string, fields: Record<string, any>): Promise<void> => {
+    const { error } = await supabase
+        .from('obras')
+        .update(fields)
+        .eq('id', id);
+
+    if (error) {
+        console.error(`Error updating obra fields ${id}:`, error);
+        throw error;
+    }
+};
+
 export const getObras = async (): Promise<Obra[]> => {
     const { data, error } = await supabase
         .from('obras')

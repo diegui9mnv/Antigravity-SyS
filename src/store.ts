@@ -349,6 +349,11 @@ export const fileStructureTemplate = [
       { id: "cat-visitas", name: "Visitas", type: "category" },
       { id: "cat-li", name: "Anotaciones LI", type: "category" }
     ]
+  },
+  {
+    id: "cat-otros",
+    name: "Otros",
+    type: "category"
   }
 ];
 

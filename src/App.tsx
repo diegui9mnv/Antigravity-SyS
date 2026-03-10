@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react
 import { Waves } from 'lucide-react';
 import ProjectsList from './pages/ProjectsList';
 import ProjectsLocation from './pages/ProjectsLocation';
+import ProjectsExcelTracking from './pages/ProjectsExcelTracking';
 import ProjectDetails from './pages/ProjectDetails';
 import Agenda from './pages/Agenda';
 import UsersList from './pages/UsersList';
@@ -164,6 +165,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ProjectsList />} />
           <Route path="/obras/localizacion" element={<ProjectsLocation />} />
+          <Route path="/obras/seguimiento-excel" element={<ProjectsExcelTracking />} />
           <Route path="/agenda" element={<Agenda />} />
           <Route path="/plantillas" element={canManage ? <Plantillas /> : <Navigate to="/" />} />
           <Route path="/usuarios" element={canUsers ? <UsersList /> : <Navigate to="/" />} />

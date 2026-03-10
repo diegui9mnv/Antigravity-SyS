@@ -42,6 +42,22 @@ export const getTodosDocumentos = async (obraId: string): Promise<DocumentoMetaD
     return data || [];
 };
 
+export const getDocumentosByObraIds = async (obraIds: string[]): Promise<DocumentoMetaData[]> => {
+    if (!obraIds || obraIds.length === 0) return [];
+
+    const { data, error } = await supabase
+        .from('obras_archivos')
+        .select('*')
+        .in('obra_id', obraIds)
+        .order('upload_date', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching documentos by obra ids:', error);
+        throw error;
+    }
+    return data || [];
+};
+
 export const uploadDocumento = async (
     obraId: string,
     categoryId: string,

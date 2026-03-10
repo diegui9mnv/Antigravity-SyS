@@ -15,27 +15,32 @@ interface EventModalProps {
 }
 
 export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assignedContacts, formatAgentName, onClose, onSave, initialData, defaultTitle }) => {
-    if (!isOpen) return null;
+    const resolveTitle = () => initialData?.titulo || initialData?.title || defaultTitle || `Acta ${tipo} 001`;
+    const resolveStart = () => initialData?.fecha_planificada || initialData?.start || obra?.fechaInicio || '';
+    const resolveEnd = () => initialData?.fecha_fin || initialData?.end || obra?.fechaFin || '';
+    const resolveEstado = () => initialData?.estado || 'Planificada';
+    const resolveCoordinadorId = () => initialData?.coordinador_id || initialData?.coordinadorId || '';
+    const resolveFrecuencia = () => initialData?.frecuencia || 'Puntual';
 
-    // Auto-generate title index (this is simplified as we don't have the list here, but could be passed if needed)
-    // For now we'll just set a generic editable default
-    const [title, setTitle] = useState(initialData?.title || defaultTitle || `Acta ${tipo} 001`);
-    const [start, setStart] = useState(initialData?.start || obra?.fechaInicio || '');
-    const [end, setEnd] = useState(initialData?.end || obra?.fechaFin || '');
-    const [estado, setEstado] = useState(initialData?.estado || 'Planificada');
-    const [coordinadorId, setCoordinadorId] = useState(initialData?.coordinadorId || '');
-    const [frecuencia, setFrecuencia] = useState(initialData?.frecuencia || 'Puntual');
+    const [title, setTitle] = useState(resolveTitle());
+    const [start, setStart] = useState(resolveStart());
+    const [end, setEnd] = useState(resolveEnd());
+    const [estado, setEstado] = useState(resolveEstado());
+    const [coordinadorId, setCoordinadorId] = useState(resolveCoordinadorId());
+    const [frecuencia, setFrecuencia] = useState(resolveFrecuencia());
 
     useEffect(() => {
         if (isOpen) {
-            setTitle(initialData?.title || defaultTitle || `Acta ${tipo} 001`);
-            setStart(initialData?.start || obra?.fechaInicio || '');
-            setEnd(initialData?.end || obra?.fechaFin || '');
-            setEstado(initialData?.estado || 'Planificada');
-            setCoordinadorId(initialData?.coordinadorId || '');
-            setFrecuencia(initialData?.frecuencia || 'Puntual');
+            setTitle(resolveTitle());
+            setStart(resolveStart());
+            setEnd(resolveEnd());
+            setEstado(resolveEstado());
+            setCoordinadorId(resolveCoordinadorId());
+            setFrecuencia(resolveFrecuencia());
         }
     }, [initialData, defaultTitle, tipo, obra, isOpen]);
+
+    if (!isOpen) return null;
 
     const handleSave = () => {
         if (!start || !end) {
@@ -46,7 +51,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             title, start, end, estado, coordinadorId, frecuencia
         });
         // reset state after save if opening again isn't unmounting
-        setTitle(defaultTitle || `Acta ${tipo} 001`);
+        setTitle(resolveTitle());
     };
 
     return (
@@ -60,9 +65,9 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             zIndex: 1000,
             padding: '1rem'
         }}>
-            <Card style={{ width: '100%', maxWidth: '500px', backgroundColor: 'var(--color-background)' }}>
+            <Card className="event-modal-card" style={{ width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--color-background)' }}>
                 <CardHeader style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Programar nueva {tipo}</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{initialData ? `Editar ${tipo}` : `Programar nueva ${tipo}`}</h3>
                     <button onClick={onClose} className="btn-icon">
                         <X size={20} />
                     </button>

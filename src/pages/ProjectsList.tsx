@@ -1,9 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, MapPinned, Plus, Search, Trash2 } from 'lucide-react';
+import { Edit2, FileSpreadsheet, MapPinned, Plus, Search, Trash2 } from 'lucide-react';
 import { deleteObra, getObras, type Obra } from '../lib/api/obras';
 import { Badge, Button } from '../components/ui';
 import CreateProjectModal from '../components/CreateProjectModal';
+
+const normalizeObraStatus = (status: string | null | undefined): 'solicitud' | 'preparacion' | 'completada' => {
+    const value = (status || '').trim().toLowerCase();
+    if (value === 'completada') return 'completada';
+    if (value === 'preparación' || value === 'preparacion' || value === 'en curso') return 'preparacion';
+    return 'solicitud';
+};
+
+const formatObraStatus = (status: string | null | undefined): string => {
+    const normalized = normalizeObraStatus(status);
+    if (normalized === 'preparacion') return 'Preparación';
+    if (normalized === 'completada') return 'Completada';
+    return 'Solicitud';
+};
+
+const badgeStatusForObra = (status: string | null | undefined): 'solicitud' | 'en curso' | 'completada' => {
+    const normalized = normalizeObraStatus(status);
+    return normalized === 'preparacion' ? 'en curso' : normalized;
+};
 
 export default function ProjectsList() {
     const navigate = useNavigate();
@@ -67,7 +86,7 @@ export default function ProjectsList() {
         && (obra.municipio || '').toLowerCase().includes(filters.municipio.toLowerCase())
         && (obra.expediente || '').toLowerCase().includes(filters.expediente.toLowerCase())
         && (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase())
-        && (filters.estado === '' || obra.estado === filters.estado)
+        && (filters.estado === '' || normalizeObraStatus(obra.estado) === filters.estado)
     ));
 
     return (
@@ -81,6 +100,10 @@ export default function ProjectsList() {
                     <Button variant="outline" onClick={() => navigate('/obras/localizacion')}>
                         <MapPinned size={18} />
                         Localización de Obras
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/obras/seguimiento-excel')}>
+                        <FileSpreadsheet size={18} />
+                        Seguimiento Excel
                     </Button>
                     <Button onClick={() => { setEditingObra(null); setIsModalOpen(true); }}>
                         <Plus size={18} />
@@ -115,7 +138,7 @@ export default function ProjectsList() {
                         <select name="estado" value={filters.estado} onChange={handleFilterChange} className="input-field" style={{ backgroundColor: 'white', width: '100%' }}>
                             <option value="">Todos</option>
                             <option value="solicitud">Solicitud</option>
-                            <option value="en curso">En Curso</option>
+                            <option value="preparacion">Preparación</option>
                             <option value="completada">Completada</option>
                         </select>
                     </div>
@@ -146,7 +169,9 @@ export default function ProjectsList() {
                                         {obra.cebe && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CEBE: {obra.cebe}</div>}
                                     </td>
                                     <td><span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{obra.codigo_obra || '-'}</span></td>
-                                    <td><Badge status={obra.estado}>{obra.estado}</Badge></td>
+                                    <td>
+                                        <Badge status={badgeStatusForObra(obra.estado)}>{formatObraStatus(obra.estado)}</Badge>
+                                    </td>
                                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                         {obra.fecha_inicio} <br /> {obra.fecha_fin}
                                     </td>
@@ -186,3 +211,4 @@ export default function ProjectsList() {
         </div>
     );
 }
+

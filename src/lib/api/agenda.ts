@@ -13,6 +13,7 @@ export interface Persona {
     id: string;
     nombre: string;
     apellidos: string | null;
+    correo: string | null;
     tipo: string | null;
     empresa_id: string | null;
     created_at?: string;

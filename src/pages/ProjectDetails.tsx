@@ -1,11 +1,11 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save } from 'lucide-react';
+import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save, RotateCw, Copy } from 'lucide-react';
 import { updateObra as updateObraLocal, fileStructureTemplate, getPlantillasByCategory } from '../store';
 import { getDocumentos, getTodosDocumentos, uploadDocumento, updateDocumentoMetadata, deleteDocumento, getDocumentoUrl, type DocumentoMetaData } from '../lib/api/documentos';
 import { getEventos, createEvento, updateEvento, deleteEvento, type ObraEvento } from '../lib/api/eventos';
 import { getLibroSubcontratas as getLibroSubcontratasDB, createLibroEntry, updateLibroEntry, deleteLibroEntry, type LibroSubcontrataEntry } from '../lib/api/subcontratas';
-import { getObraWithRelations, updateObraAgentes } from '../lib/api/obras';
+import { getObraWithRelations, updateObraAgentes, updateObraFields } from '../lib/api/obras';
 import { getEmpresas as getEmpresasAPI, getPersonas as getPersonasAPI, createEmpresa as createEmpresaAPI, updateEmpresa as updateEmpresaAPI, deleteEmpresa as deleteEmpresaAPI, createPersona as createPersonaAPI, updatePersona as updatePersonaAPI, deletePersona as deletePersonaAPI } from '../lib/api/agenda';
 import { createActaPdfUrl } from '../lib/actaPdf';
 import JSZip from 'jszip';
@@ -26,6 +26,48 @@ const getNodeFileCount = (node: any, allFiles: DocumentoMetaData[]): number => {
         return node.children.reduce((acc: number, child: any) => acc + getNodeFileCount(child, allFiles), 0);
     }
     return 0;
+};
+
+const OBRA_STATUS_SEQUENCE = ['solicitud', 'preparacion', 'completada'] as const;
+const DEFAULT_QUICK_UPLOAD_CATEGORY_ID = 'cat-otros';
+type ObraStatus = typeof OBRA_STATUS_SEQUENCE[number];
+
+const normalizeObraStatus = (status: string | null | undefined): ObraStatus => {
+    const value = (status || '').trim().toLowerCase();
+    if (value === 'completada') return 'completada';
+    if (value === 'preparación' || value === 'preparacion' || value === 'en curso') return 'preparacion';
+    return 'solicitud';
+};
+
+const getNextObraStatus = (current: string | null | undefined): ObraStatus => {
+    const normalized = normalizeObraStatus(current);
+    const idx = OBRA_STATUS_SEQUENCE.indexOf(normalized);
+    return OBRA_STATUS_SEQUENCE[(idx + 1) % OBRA_STATUS_SEQUENCE.length];
+};
+
+const formatObraStatus = (status: string | null | undefined): string => {
+    const normalized = normalizeObraStatus(status);
+    if (normalized === 'preparacion') return 'Preparación';
+    if (normalized === 'completada') return 'Completada';
+    return 'Solicitud';
+};
+
+const badgeStatusForObra = (status: string | null | undefined): string => {
+    const normalized = normalizeObraStatus(status);
+    return normalized === 'preparacion' ? 'en curso' : normalized;
+};
+
+const collectCategoryOptions = (nodes: any[], parentPath: string = ''): Array<{ id: string; label: string }> => {
+    return nodes.flatMap((node: any) => {
+        const currentPath = parentPath ? `${parentPath} / ${node.name}` : node.name;
+        if (node.type === 'category') {
+            return [{ id: node.id, label: currentPath }];
+        }
+        if (node.children) {
+            return collectCategoryOptions(node.children, currentPath);
+        }
+        return [];
+    });
 };
 
 const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, onClearEvent, allObraFiles }: any) => {
@@ -54,6 +96,7 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
     const isCategory = node.type === 'category';
     const isActive = activeCategoryId === node.id;
     const isFolderActive = activeFolder?.id === node.id;
+    const isNodeActive = isActive || isFolderActive;
     const isRoot = level === 0;
 
     const handleClick = () => {
@@ -79,14 +122,14 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
                     alignItems: 'center',
                     gap: '0.75rem',
                     cursor: 'pointer',
-                    backgroundColor: (isActive || isFolderActive) ? 'var(--color-surface-hover)' : 'transparent',
-                    color: (isActive || isFolderActive) ? 'var(--color-primary-dark)' : 'var(--text-main)',
-                    fontWeight: (isActive || isFolderActive) ? 600 : 400,
+                    backgroundColor: isNodeActive ? 'var(--color-surface-hover)' : 'transparent',
+                    color: isNodeActive ? 'var(--color-primary-dark)' : 'var(--text-main)',
+                    fontWeight: isNodeActive ? 600 : 400,
                     border: 'none',
                     boxShadow: isRoot
-                        ? `inset 0 0 0 1px ${(isActive || isFolderActive) ? 'var(--color-primary)' : 'var(--border-color)'}`
+                        ? `inset 0 0 0 1px ${isNodeActive ? 'var(--color-primary)' : 'var(--border-color)'}`
                         : 'none',
-                    borderLeft: (!isRoot && (isActive || isFolderActive)) ? '3px solid var(--color-primary)' : (!isRoot ? '3px solid transparent' : undefined),
+                    borderLeft: (!isRoot && isNodeActive) ? '3px solid var(--color-primary)' : (!isRoot ? '3px solid transparent' : undefined),
                     borderRadius: isRoot ? 'var(--radius-md)' : '0',
                     marginBottom: isRoot ? '0.5rem' : '0',
                     transition: 'all var(--transition-fast)',
@@ -465,12 +508,18 @@ export default function ProjectDetails() {
     const [activeEvent, setActiveEvent] = useState<any>(null);
     const [activeReportType, setActiveReportType] = useState<'reunion' | 'visita'>('visita');
     const [eventTypeToCreate, setEventTypeToCreate] = useState<'reunion' | 'visita'>('visita');
+    const [eventModalInitialData, setEventModalInitialData] = useState<any>(null);
+    const [duplicateSourceEvent, setDuplicateSourceEvent] = useState<any>(null);
 
     // Contactos View State
     const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
     const [isLibroModalOpen, setIsLibroModalOpen] = useState(false);
     const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+    const [isQuickUploadModalOpen, setIsQuickUploadModalOpen] = useState(false);
+    const [quickUploadCategoryId, setQuickUploadCategoryId] = useState('');
+    const [isQuickUploading, setIsQuickUploading] = useState(false);
+    const [isStatusUpdating, setIsStatusUpdating] = useState(false);
     const [internalNotes, setInternalNotes] = useState('');
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
     const [allEmpresas, setAllEmpresas] = useState<any[]>([]);
@@ -499,6 +548,11 @@ export default function ProjectDetails() {
         isCoreRole: false
     });
 
+    const quickUploadCategories = useMemo(
+        () => collectCategoryOptions(fileStructureTemplate),
+        []
+    );
+
     const persistAssignedContacts = async (next: any[]) => {
         const previous = assignedContacts;
         setAssignedContacts(next);
@@ -510,6 +564,42 @@ export default function ProjectDetails() {
             setAssignedContacts(previous);
             alert('No se pudieron guardar los colaboradores en la base de datos.');
         }
+    };
+
+    const handleCycleObraStatus = async () => {
+        if (!obra?.id || isStatusUpdating) return;
+        const nextStatus = getNextObraStatus(obra.estado);
+        setIsStatusUpdating(true);
+        try {
+            await updateObraFields(obra.id, { estado: nextStatus });
+            setObra((prev: any) => ({ ...prev, estado: nextStatus }));
+        } catch (error) {
+            console.error('Error updating obra status:', error);
+            alert('No se pudo actualizar el estado de la obra.');
+        } finally {
+            setIsStatusUpdating(false);
+        }
+    };
+
+    const handleSaveInternalNotes = async () => {
+        if (!obra?.id) return;
+        try {
+            await updateObraFields(obra.id, { notas_internas: internalNotes });
+            setObra((prev: any) => ({ ...prev, notasInternas: internalNotes }));
+            setIsNotesModalOpen(false);
+        } catch (error) {
+            console.error('Error saving internal notes:', error);
+            alert('No se pudieron guardar las notas internas.');
+        }
+    };
+
+    const openQuickUploadModal = () => {
+        const defaultCategoryId =
+            quickUploadCategories.find((opt) => opt.id === DEFAULT_QUICK_UPLOAD_CATEGORY_ID)?.id
+            || quickUploadCategories[0]?.id
+            || '';
+        setQuickUploadCategoryId(defaultCategoryId);
+        setIsQuickUploadModalOpen(true);
     };
 
     const handleSaveEmpresa = async (data: any) => {
@@ -530,14 +620,20 @@ export default function ProjectDetails() {
 
     const handleSavePersona = async (data: any) => {
         try {
+            const payload = {
+                ...data,
+                correo: data?.correo || null,
+                empresa_id: data?.empresa_id || null,
+            };
             if (editingContactId) {
-                await updatePersonaAPI(editingContactId, data);
+                await updatePersonaAPI(editingContactId, payload);
             } else {
                 await createPersonaAPI({
-                    nombre: data.nombre,
-                    apellidos: data.apellidos,
-                    tipo: data.tipo,
-                    empresa_id: data.empresa_id || null
+                    nombre: payload.nombre,
+                    apellidos: payload.apellidos,
+                    correo: payload.correo,
+                    tipo: payload.tipo,
+                    empresa_id: payload.empresa_id
                 });
             }
             setEditingContactId(null);
@@ -604,6 +700,7 @@ export default function ProjectDetails() {
         coordinadorSysId: ob.coordinador_sys_ids ?? ob.coordinadorSysId ?? [],
         directorObraId: ob.director_obra_ids ?? ob.directorObraId ?? [],
         jefeObraId: ob.jefe_obra_ids ?? ob.jefeObraId ?? [],
+        notasInternas: ob.notas_internas ?? ob.notasInternas ?? '',
     });
 
     const normalizeLibroRows = (rows: any[]) =>
@@ -626,6 +723,7 @@ export default function ProjectDetails() {
 
                 const ob = normalizeObraForUi(obRaw);
                 setObra(ob);
+                setInternalNotes(ob?.notasInternas || '');
                 setAssignedContacts(ob?.agentes || []);
 
                 const empresas = (empresasApi || []).map((e: any) => ({
@@ -731,25 +829,64 @@ export default function ProjectDetails() {
         await refreshAllFiles();
     };
 
+    const onDropQuickUpload = async (acceptedFiles: File[]) => {
+        if (!id || !quickUploadCategoryId || acceptedFiles.length === 0) return;
+        setIsQuickUploading(true);
+        try {
+            for (const file of acceptedFiles) {
+                await uploadDocumento(id, quickUploadCategoryId, file);
+            }
+            await refreshAllFiles();
+            if (activeCategory?.id === quickUploadCategoryId) {
+                setFiles(await getDocumentos(id, quickUploadCategoryId));
+            }
+            setIsQuickUploadModalOpen(false);
+        } catch (error) {
+            console.error('Error in quick upload:', error);
+            alert('No se pudieron subir los documentos.');
+        } finally {
+            setIsQuickUploading(false);
+        }
+    };
+
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+    const {
+        getRootProps: getQuickUploadRootProps,
+        getInputProps: getQuickUploadInputProps,
+        isDragActive: isQuickUploadDragActive,
+    } = useDropzone({
+        onDrop: onDropQuickUpload,
+        disabled: !quickUploadCategoryId || isQuickUploading,
+    });
 
 
-    const handleSaveEvent = async (tipo: 'reunion' | 'visita', record: any) => {
-        if (!id) return;
+    const handleSaveEvent = async (tipo: 'reunion' | 'visita', record: any): Promise<string | null> => {
+        if (!id) return null;
+        const eventId = record.id || record.eventId || null;
         const dbRecord = {
             obra_id: id,
             tipo: tipo,
-            titulo: record.title || 'Nuevo Evento',
-            fecha_planificada: record.start,
-            fecha_fin: record.end,
+            titulo: record.title || record.titulo || 'Nuevo Evento',
+            fecha_planificada: record.start || record.fecha_planificada,
+            fecha_fin: record.end || record.fecha_fin,
             frecuencia: record.frecuencia || null,
             estado: record.estado || 'Planificada',
-            coordinador_id: record.coordinadorId || null,
+            coordinador_id: record.coordinadorId || record.coordinador_id || null,
         };
-        await createEvento(dbRecord);
+        let savedEventId = eventId;
+        if (eventId) {
+            await updateEvento(eventId, dbRecord);
+        } else {
+            const created = await createEvento(dbRecord);
+            savedEventId = created.id;
+        }
         if (tipo === 'reunion') setReuniones(await getEventos(id, 'reunion'));
         else setVisitas(await getEventos(id, 'visita'));
         setIsEventModalOpen(false);
+        setEditingContactId(null);
+        setEventModalInitialData(null);
+        setDuplicateSourceEvent(null);
+        return savedEventId;
     };
 
     const handleSaveEventReport = async (eventId: string, updatedData: any) => {
@@ -818,6 +955,9 @@ export default function ProjectDetails() {
     };
 
     const activeFolder = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
+    const mainTreeNodes = fileStructureTemplate.filter((node: any) => node.id !== DEFAULT_QUICK_UPLOAD_CATEGORY_ID);
+    const otrosTreeNode = fileStructureTemplate.find((node: any) => node.id === DEFAULT_QUICK_UPLOAD_CATEGORY_ID) || null;
+    const isOtrosActive = activeCategory?.id === DEFAULT_QUICK_UPLOAD_CATEGORY_ID;
 
     // Global file summaries
     const projectGlobalFiles = getProjectGlobalFiles();
@@ -862,6 +1002,86 @@ export default function ProjectDetails() {
             console.error(error);
             alert('No se pudo generar la vista del acta.');
         }
+    };
+
+    const getEventTitle = (row: any) => row?.titulo || row?.title || 'Sin título';
+    const getEventStart = (row: any) => row?.fecha_planificada || row?.start || '';
+    const getEventEnd = (row: any) => row?.fecha_fin || row?.end || '';
+    const getEventCoordinatorId = (row: any) => row?.coordinador_id || row?.coordinadorId || '';
+
+    const buildDuplicateEventDraft = (source: any) => {
+        const title = getEventTitle(source);
+        const baseTitle = /\(copia\)$/i.test(title.trim()) ? title : `${title} (Copia)`;
+        return {
+            ...source,
+            id: null,
+            titulo: baseTitle,
+            title: baseTitle,
+            fecha_planificada: getEventStart(source),
+            start: getEventStart(source),
+            fecha_fin: getEventEnd(source) || getEventStart(source),
+            end: getEventEnd(source) || getEventStart(source),
+            frecuencia: source?.frecuencia || null,
+            estado: source?.estado || 'Planificada',
+            coordinador_id: getEventCoordinatorId(source) || null,
+            coordinadorId: getEventCoordinatorId(source) || null,
+        };
+    };
+
+    const buildDuplicatedReportUpdates = (source: any) => {
+        const sourceEsPuntual =
+            source?.es_reunion_puntual !== undefined && source?.es_reunion_puntual !== null
+                ? source.es_reunion_puntual
+                : (source?.esReunionPuntual === true || source?.esReunionPuntual === 'true');
+
+        return {
+            introduccion: source?.introduccion ?? null,
+            asistentes: source?.asistentes ?? null,
+            es_reunion_puntual: sourceEsPuntual,
+            orden_del_dia: source?.orden_del_dia ?? source?.ordenDelDia ?? null,
+            desarrollo_reunion: source?.desarrollo_reunion ?? source?.desarrolloReunion ?? null,
+            ubicacion: source?.ubicacion ?? null,
+            tipo_obra: source?.tipo_obra ?? source?.tipoObra ?? null,
+            recurso_preventivo: source?.recurso_preventivo ?? source?.recursoPreventivo ?? null,
+            n_trabajadores: source?.n_trabajadores ?? source?.nTrabajadores ?? null,
+            trabajos_en_curso: source?.trabajos_en_curso ?? source?.trabajosEnCurso ?? null,
+            subcontratas: source?.subcontratas ?? null,
+            unidades_ejecucion: source?.unidades_ejecucion ?? source?.unidadesEjecucion ?? null,
+            epis: source?.epis ?? null,
+            medios_auxiliares: source?.medios_auxiliares ?? source?.mediosAuxiliares ?? null,
+            instalacion_electrica: source?.instalacion_electrica ?? source?.instalacionElectrica ?? null,
+            condiciones_ambientales: source?.condiciones_ambientales ?? source?.condicionesAmbientales ?? null,
+            organizacion_obra: source?.organizacion_obra ?? source?.organizacionObra ?? null,
+            observaciones: source?.observaciones ?? null,
+            accidentes: source?.accidentes ?? null,
+            recordatorio: source?.recordatorio ?? null,
+            planificacion_trabajos: source?.planificacion_trabajos ?? source?.planificacionTrabajos ?? null,
+            coordenadas: source?.coordenadas ?? null,
+            fecha_hora: source?.fecha_hora ?? source?.fechaHora ?? null,
+            fotos: [],
+            firmas: [],
+            adjuntos: [],
+        };
+    };
+
+    const applyDuplicatedReportData = async (type: 'reunion' | 'visita', newEventId: string, source: any) => {
+        if (!id) return;
+        const reportUpdates = buildDuplicatedReportUpdates(source);
+        await updateEvento(newEventId, reportUpdates);
+        if (type === 'reunion') {
+            setReuniones(await getEventos(id, 'reunion'));
+        } else {
+            setVisitas(await getEventos(id, 'visita'));
+        }
+    };
+
+    const openDuplicateEventModal = (type: 'reunion' | 'visita', row: any) => {
+        setEventTypeToCreate(type);
+        setEditingContactId(null);
+        setDuplicateSourceEvent(row);
+        setEventModalInitialData(buildDuplicateEventDraft(row));
+        setActiveEvent(null);
+        setIsEventModalOpen(true);
     };
 
     const renderAgentsBadges = (ids: string | string[] | undefined, label: string, type: 'empresa' | 'persona') => {
@@ -917,6 +1137,9 @@ export default function ProjectDetails() {
                     <Button onClick={() => {
                         setEventTypeToCreate(type);
                         setActiveEvent(null);
+                        setEditingContactId(null);
+                        setEventModalInitialData(null);
+                        setDuplicateSourceEvent(null);
                         onAdd();
                     }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
                         {type === 'reunion' ? '+ Nueva Reunión' : '+ Nueva Visita'}
@@ -928,7 +1151,7 @@ export default function ProjectDetails() {
                     </p>
                 ) : (
                     <div className="table-container" style={{ margin: 0 }}>
-                        <table className="table" style={{ width: '100%' }}>
+                        <table className="table events-table" style={{ width: '100%' }}>
                             <thead>
                                 <tr>
                                     <th>Título</th>
@@ -944,17 +1167,17 @@ export default function ProjectDetails() {
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 <FileText size={16} style={{ color: 'var(--color-primary)' }} />
-                                                <strong>{row.titulo}</strong>
+                                                <strong>{getEventTitle(row)}</strong>
                                             </div>
                                         </td>
                                         <td>
                                             <div style={{ fontSize: '0.85rem' }}>
-                                                <span style={{ color: 'var(--text-muted)' }}>Planificada:</span> {new Date(row.fecha_planificada).toLocaleDateString()}<br />
-                                                <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(row.fecha_fin).toLocaleDateString()}
+                                                <span style={{ color: 'var(--text-muted)' }}>Planificada:</span> {new Date(getEventStart(row)).toLocaleDateString()}<br />
+                                                <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(getEventEnd(row)).toLocaleDateString()}
                                             </div>
                                         </td>
                                         <td style={{ textAlign: 'center' }}><Badge status={row.estado || 'Planificada'}>{row.estado || 'Planificada'}</Badge></td>
-                                        <td>{formatAgentName(row.coordinador_id || '', 'persona')}</td>
+                                        <td>{formatAgentName(getEventCoordinatorId(row), 'persona')}</td>
                                         <td style={{ textAlign: 'center' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                                                 {hasGeneratedActa(row) && (
@@ -969,12 +1192,20 @@ export default function ProjectDetails() {
                                                     e.stopPropagation();
                                                     // Abre el modal de eventos con los datos actuales para editar
                                                     setActiveReportType(type);
-                                                    setActiveEvent(row);
+                                                    setActiveEvent(null);
                                                     setEditingContactId(row.id);
                                                     setEventTypeToCreate(type);
+                                                    setEventModalInitialData(row);
+                                                    setDuplicateSourceEvent(null);
                                                     setIsEventModalOpen(true);
                                                 }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                     <Edit2 size={18} />
+                                                </button>
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openDuplicateEventModal(type, row);
+                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
+                                                    <Copy size={18} />
                                                 </button>
                                                 <button onClick={async (e) => {
                                                     e.stopPropagation();
@@ -1029,8 +1260,18 @@ export default function ProjectDetails() {
                         <ArrowLeft size={16} /> Volver a Obras
                     </Link>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <Button variant="outline" onClick={() => setIsNotesModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-warning)' }}>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setInternalNotes(obra?.notasInternas || '');
+                                setIsNotesModalOpen(true);
+                            }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-warning)' }}
+                        >
                             <StickyNote size={16} /> Notas Internas
+                        </Button>
+                        <Button variant="outline" onClick={openQuickUploadModal} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <UploadCloud size={16} /> Subida rápida
                         </Button>
                         <Button onClick={handleDownloadZip} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <Download size={16} /> Descargar Documentación (ZIP)
@@ -1043,7 +1284,18 @@ export default function ProjectDetails() {
                         <div className="flex items-center gap-4 mb-2">
                             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', letterSpacing: '-0.025em' }}>{obra.denominacion}</h1>
                             <div className="flex items-center gap-2">
-                                <Badge status={obra.estado}>{obra.estado}</Badge>
+                                <Badge status={badgeStatusForObra(obra.estado)}>{formatObraStatus(obra.estado)}</Badge>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleCycleObraStatus}
+                                    disabled={isStatusUpdating}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                    title={`Cambiar a ${formatObraStatus(getNextObraStatus(obra.estado))}`}
+                                >
+                                    <RotateCw size={14} />
+                                    {isStatusUpdating ? 'Actualizando...' : `Pasar a ${formatObraStatus(getNextObraStatus(obra.estado))}`}
+                                </Button>
                                 {obra.tipologia && <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 500, marginLeft: '0.25rem' }}>{obra.tipologia}</span>}
                             </div>
                         </div>
@@ -1063,71 +1315,100 @@ export default function ProjectDetails() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isSidebarOpen ? 'minmax(280px, 1fr) 3fr' : 'auto 1fr', gap: '2rem', height: 'calc(100vh - 220px)', minHeight: '600px', transition: 'grid-template-columns 0.3s ease' }}>
+                <div className="project-details-grid" style={{ display: 'grid', gridTemplateColumns: isSidebarOpen ? 'minmax(280px, 1fr) 3fr' : 'auto 1fr', gap: '2rem', height: 'calc(100vh - 220px)', minHeight: '600px', transition: 'grid-template-columns 0.3s ease' }}>
                     {/* Document Tree Sidebar */}
                     <Card style={{ height: '100%', display: 'flex', flexDirection: 'column', width: isSidebarOpen ? 'auto' : 'fit-content' }}>
-                        <div className={`flex ${isSidebarOpen ? 'justify-between' : 'justify-center'} items-center`} style={{ padding: '1rem', paddingBottom: '0.5rem', borderBottom: isSidebarOpen ? '1px solid var(--border-color)' : 'none' }}>
-                            {isSidebarOpen && (
+                            <div className={`flex ${isSidebarOpen ? 'justify-between' : 'justify-center'} items-center`} style={{ padding: '1rem', paddingBottom: '0.5rem', borderBottom: isSidebarOpen ? '1px solid var(--border-color)' : 'none' }}>
+                                {isSidebarOpen && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0.5rem', flex: 1, minWidth: 0 }}>
+                                        <button
+                                            onClick={() => {
+                                                setActiveCategory(null);
+                                                setFolderStack([]);
+                                                setActiveEvent(null);
+                                            }}
+                                            style={{
+                                                fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                background: 'white', border: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--color-primary-dark)',
+                                                fontWeight: 600, padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)',
+                                                outline: 'none', transition: 'all var(--transition-fast)', boxShadow: 'var(--shadow-sm)'
+                                            }}
+                                            className="hover:bg-surface-hover"
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.borderColor = 'var(--border-color)';
+                                            }}
+                                            title="Ir al resumen global"
+                                        >
+                                            <Folders size={18} /> Árbol Documental
+                                        </button>
+                                        {otrosTreeNode && (
+                                            <button
+                                                onClick={() => {
+                                                    setActiveCategory(otrosTreeNode);
+                                                    setFolderStack([]);
+                                                    setActiveEvent(null);
+                                                }}
+                                                style={{
+                                                    fontSize: '0.85rem',
+                                                    background: isOtrosActive ? 'var(--color-surface-hover)' : 'white',
+                                                    border: `1px solid ${isOtrosActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                                    cursor: 'pointer',
+                                                    color: 'var(--color-primary-dark)',
+                                                    fontWeight: 600,
+                                                    padding: '0.45rem 0.75rem',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    outline: 'none',
+                                                    transition: 'all var(--transition-fast)',
+                                                    boxShadow: 'var(--shadow-sm)',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                                className="hover:bg-surface-hover"
+                                                title="Acceso rápido a Otros"
+                                            >
+                                                Otros
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <button
-                                    onClick={() => {
-                                        setActiveCategory(null);
-                                        setFolderStack([]);
-                                        setActiveEvent(null);
-                                    }}
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    title={isSidebarOpen ? "Ocultar panel" : "Mostrar panel"}
                                     style={{
-                                        fontSize: '0.95rem', margin: '0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: 'white', border: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--color-primary-dark)',
-                                        fontWeight: 600, padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)',
-                                        outline: 'none', transition: 'all var(--transition-fast)', boxShadow: 'var(--shadow-sm)'
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0.5rem',
+                                        borderRadius: '0.375rem',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--text-main)',
+                                        border: '1px solid transparent',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
                                     }}
-                                    className="hover:bg-surface-hover"
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.borderColor = 'var(--color-primary)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.borderColor = 'var(--border-color)';
-                                    }}
-                                    title="Ir al resumen global"
+                                    className="hover:bg-surface-hover hover:border-border"
                                 >
-                                    <Folders size={18} /> Árbol Documental
+                                    <Menu size={20} />
                                 </button>
-                            )}
-                            <button
-                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                title={isSidebarOpen ? "Ocultar panel" : "Mostrar panel"}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    padding: '0.5rem',
-                                    borderRadius: '0.375rem',
-                                    backgroundColor: 'transparent',
-                                    color: 'var(--text-main)',
-                                    border: '1px solid transparent',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                }}
-                                className="hover:bg-surface-hover hover:border-border"
-                            >
-                                <Menu size={20} />
-                            </button>
-                        </div>
-                        {isSidebarOpen && (
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.85rem' }}>
-                                {fileStructureTemplate.map((node) => (
-                                    <DocumentTreeNode
-                                        key={node.id}
-                                        node={node}
-                                        activeCategoryId={activeCategory?.id}
-                                        onSelectCategory={setActiveCategory}
-                                        activeFolder={activeFolder}
-                                        setFolderStack={setFolderStack}
-                                        onClearEvent={() => setActiveEvent(null)}
-                                        allObraFiles={allObraFiles}
-                                    />
-                                ))}
                             </div>
-                        )}
+                            {isSidebarOpen && (
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.85rem' }}>
+                                    {mainTreeNodes.map((node) => (
+                                        <DocumentTreeNode
+                                            key={node.id}
+                                            node={node}
+                                            activeCategoryId={activeCategory?.id}
+                                            onSelectCategory={setActiveCategory}
+                                            activeFolder={activeFolder}
+                                            setFolderStack={setFolderStack}
+                                            onClearEvent={() => setActiveEvent(null)}
+                                            allObraFiles={allObraFiles}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                     </Card>
 
                     {/* Content Area */}
@@ -1141,6 +1422,8 @@ export default function ProjectDetails() {
                                     eventData={activeEvent}
                                     obra={obra}
                                     assignedContacts={assignedContacts}
+                                    allPersonas={allPersonas}
+                                    allEmpresas={allEmpresas}
                                     formatAgentName={formatAgentName}
                                     onClose={() => setActiveEvent(null)}
                                     onSave={handleSaveEventReport}
@@ -1384,6 +1667,8 @@ export default function ProjectDetails() {
                                                 eventData={activeEvent}
                                                 obra={obra}
                                                 assignedContacts={assignedContacts}
+                                                allPersonas={allPersonas}
+                                                allEmpresas={allEmpresas}
                                                 formatAgentName={formatAgentName}
                                                 onClose={() => setActiveEvent(null)}
                                                 onSave={(id, data) => handleSaveEvent(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita', { ...data, id })}
@@ -1693,7 +1978,14 @@ export default function ProjectDetails() {
                                                                 <h4 style={{ margin: 0, fontSize: '1rem' }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? `Reuniones (${reuniones.length})` : `Visitas (${visitas.length})`}
                                                                 </h4>
-                                                                <Button onClick={() => setIsEventModalOpen(true)} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
+                                                                <Button onClick={() => {
+                                                                    setEventTypeToCreate(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
+                                                                    setEditingContactId(null);
+                                                                    setActiveEvent(null);
+                                                                    setEventModalInitialData(null);
+                                                                    setDuplicateSourceEvent(null);
+                                                                    setIsEventModalOpen(true);
+                                                                }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? '+ Nueva Reunión' : '+ Nueva Visita'}
                                                                 </Button>
                                                             </div>
@@ -1705,7 +1997,7 @@ export default function ProjectDetails() {
                                                                 </p>
                                                             ) : (
                                                                 <div className="table-container" style={{ margin: 0 }}>
-                                                                    <table className="table" style={{ width: '100%' }}>
+                                                                    <table className="table events-table" style={{ width: '100%' }}>
                                                                         <thead>
                                                                             <tr>
                                                                                 <th>Asunto</th>
@@ -1722,18 +2014,18 @@ export default function ProjectDetails() {
                                                                                     <td>
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                                                             <FileText size={16} style={{ color: 'var(--color-primary)' }} />
-                                                                                            <strong>{row.title}</strong>
+                                                                                            <strong>{getEventTitle(row)}</strong>
                                                                                         </div>
                                                                                     </td>
                                                                                     <td>
                                                                                         <div style={{ fontSize: '0.85rem' }}>
-                                                                                            <span style={{ color: 'var(--text-muted)' }}>Inicio:</span> {new Date(row.start).toLocaleString()}<br />
-                                                                                            <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(row.end).toLocaleString()}
+                                                                                            <span style={{ color: 'var(--text-muted)' }}>Inicio:</span> {new Date(getEventStart(row)).toLocaleString()}<br />
+                                                                                            <span style={{ color: 'var(--text-muted)' }}>Fin:</span> {new Date(getEventEnd(row)).toLocaleString()}
                                                                                         </div>
                                                                                     </td>
                                                                                     <td style={{ textAlign: 'center' }}><span className="badge badge-en-curso">{row.estado}</span></td>
                                                                                     <td style={{ textTransform: 'capitalize' }}>{row.frecuencia}</td>
-                                                                                    <td>{formatAgentName(row.coordinadorId, 'persona')}</td>
+                                                                                    <td>{formatAgentName(getEventCoordinatorId(row), 'persona')}</td>
                                                                                     <td style={{ textAlign: 'center' }}>
                                                                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                                                                                             {hasGeneratedActa(row) && (
@@ -1746,11 +2038,21 @@ export default function ProjectDetails() {
                                                                                             )}
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
-                                                                                                setActiveEvent(row);
+                                                                                                setActiveReportType(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
+                                                                                                setActiveEvent(null);
                                                                                                 setEventTypeToCreate(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
+                                                                                                setEditingContactId(row.id);
+                                                                                                setEventModalInitialData(row);
+                                                                                                setDuplicateSourceEvent(null);
                                                                                                 setIsEventModalOpen(true);
                                                                                             }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                                                                 <Edit2 size={18} />
+                                                                                            </button>
+                                                                                            <button onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                openDuplicateEventModal(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita', row);
+                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
+                                                                                                <Copy size={18} />
                                                                                             </button>
                                                                                             <button onClick={async (e) => {
                                                                                                 e.stopPropagation();
@@ -1814,17 +2116,33 @@ export default function ProjectDetails() {
                         setIsEventModalOpen(false);
                         setActiveEvent(null);
                         setEditingContactId(null);
+                        setEventModalInitialData(null);
+                        setDuplicateSourceEvent(null);
                     }}
-                    onSave={(data) => {
-                        handleSaveEvent(eventTypeToCreate, { id: editingContactId, ...data });
-                        setEditingContactId(null);
+                    onSave={async (data) => {
+                        try {
+                            const isEditing = Boolean(editingContactId);
+                            const eventId = editingContactId || null;
+                            const savedEventId = await handleSaveEvent(eventTypeToCreate, { id: eventId, ...data });
+                            if (!isEditing && duplicateSourceEvent && savedEventId) {
+                                try {
+                                    await applyDuplicatedReportData(eventTypeToCreate, savedEventId, duplicateSourceEvent);
+                                } catch (copyError) {
+                                    console.error('Error copiando datos de informe en duplicado:', copyError);
+                                    alert('El evento se creó, pero no se pudieron copiar los datos del informe.');
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error guardando evento:', error);
+                            alert('No se pudo guardar el evento.');
+                        }
                     }}
                     obra={obra}
                     tipo={eventTypeToCreate}
                     defaultTitle={eventTypeToCreate === 'reunion' ? `Acta Reunión ${(reuniones.length + 1).toString().padStart(3, '0')}` : `Acta visita ${(visitas.length + 1).toString().padStart(3, '0')}`}
                     assignedContacts={assignedContacts}
                     formatAgentName={formatAgentName}
-                    initialData={activeEvent}
+                    initialData={eventModalInitialData}
                 />
 
                 {/* Contactos Modals */}
@@ -1924,11 +2242,7 @@ export default function ProjectDetails() {
                             </div>
                             <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <Button variant="outline" onClick={() => setIsNotesModalOpen(false)}>Cerrar</Button>
-                                <Button onClick={() => {
-                                    updateObraLocal(id!, { ...obra, notasInternas: internalNotes });
-                                    loadObraData();
-                                    setIsNotesModalOpen(false);
-                                }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Button onClick={handleSaveInternalNotes} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Save size={16} /> Guardar Notas
                                 </Button>
                             </div>
@@ -1936,9 +2250,83 @@ export default function ProjectDetails() {
                     </div>
                 )
             }
+
+            {isQuickUploadModalOpen && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                }}>
+                    <Card style={{ width: '100%', maxWidth: '640px', backgroundColor: 'var(--color-background)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', padding: '1rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <UploadCloud size={20} /> Subida rápida de documentos
+                            </h3>
+                            <button onClick={() => setIsQuickUploadModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div className="input-group" style={{ marginBottom: 0 }}>
+                                <label className="input-label">Categoría destino</label>
+                                <select
+                                    value={quickUploadCategoryId}
+                                    onChange={(e) => setQuickUploadCategoryId(e.target.value)}
+                                    className="input-field"
+                                    style={{ backgroundColor: 'white' }}
+                                >
+                                    <option value="">Seleccionar categoría...</option>
+                                    {quickUploadCategories.map((opt) => (
+                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div
+                                {...getQuickUploadRootProps()}
+                                style={{
+                                    border: `2px dashed ${isQuickUploadDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                    borderRadius: 'var(--radius-lg)',
+                                    padding: '2.5rem 1.5rem',
+                                    textAlign: 'center',
+                                    backgroundColor: isQuickUploadDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                                    cursor: quickUploadCategoryId && !isQuickUploading ? 'pointer' : 'not-allowed',
+                                    opacity: quickUploadCategoryId ? 1 : 0.65,
+                                    transition: 'all var(--transition-fast)'
+                                }}
+                            >
+                                <input {...getQuickUploadInputProps()} />
+                                <UploadCloud size={36} style={{ color: isQuickUploadDragActive ? 'var(--color-primary)' : 'var(--text-muted)', margin: '0 auto 0.75rem' }} />
+                                {!quickUploadCategoryId ? (
+                                    <p style={{ margin: 0, color: 'var(--text-muted)' }}>Selecciona una categoría para subir archivos.</p>
+                                ) : isQuickUploading ? (
+                                    <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)' }}>Subiendo archivos...</p>
+                                ) : isQuickUploadDragActive ? (
+                                    <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-primary-dark)' }}>Suelta los archivos aquí...</p>
+                                ) : (
+                                    <p style={{ margin: 0 }}>Arrastra y suelta archivos aquí, o haz clic para seleccionar.</p>
+                                )}
+                            </div>
+                        </div>
+                        <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                            <Button variant="outline" onClick={() => setIsQuickUploadModalOpen(false)} disabled={isQuickUploading}>
+                                Cerrar
+                            </Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </>
     );
 }
+
 
 
 

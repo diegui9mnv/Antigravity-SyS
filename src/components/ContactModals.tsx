@@ -60,7 +60,8 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
         nombre: initialData?.nombre || '',
         apellidos: initialData?.apellidos || '',
         tipo: initialData?.tipo || CONTACT_TYPES[0],
-        empresa_id: initialData?.empresa_id || ''
+        empresa_id: initialData?.empresa_id || initialData?.empresaId || '',
+        correo: initialData?.correo || ''
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -94,6 +95,10 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
                             <select required value={formData.tipo} onChange={e => setFormData({ ...formData, tipo: e.target.value })} className="input-field" style={{ backgroundColor: 'white' }}>
                                 {CONTACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
+                        </div>
+                        <div className="input-group">
+                            <label className="input-label">Correo Electrónico</label>
+                            <input type="email" value={formData.correo} onChange={e => setFormData({ ...formData, correo: e.target.value })} className="input-field" />
                         </div>
                         <div className="input-group">
                             <label className="input-label">Empresa</label>

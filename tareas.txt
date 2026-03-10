@@ -1,0 +1,8 @@
+- Añadir posibilidad de cambiar estado de la obra
+- Corregir notas internas, no guarda
+- Añadir la posibilidad de subir documentos sin categoría, botón al lado de Notas Internas, al darle le das una "categoría" y lo subes arrastrándolo.
+- Añadir en la pantalla principal (gestión de obras) nuevo apartado para las plantillas de seguimiento Excel. Como en powerappps.
+- Envío de correos en reuniones y visitas. Usaremos el correo de Plataforma CAE.
+- Modos de visualizado de fotos para el acta (mirar en PWApps)
+- Probar funcionamiento en móvil
+- Subir todo a GitHub de CEMOSA

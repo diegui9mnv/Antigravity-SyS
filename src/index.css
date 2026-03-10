@@ -427,4 +427,72 @@ a:hover {
     grid-template-columns: 1fr;
     height: auto;
   }
+
+  .event-report-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .event-report-header {
+    position: static !important;
+  }
+
+  .event-report-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .container,
+  .container-fluid {
+    padding: 0 0.75rem;
+  }
+
+  .card-header,
+  .card-body,
+  .card-footer {
+    padding: 0.9rem;
+  }
+
+  .event-report-root {
+    padding: 0.5rem !important;
+    gap: 1rem !important;
+  }
+
+  .event-report-header {
+    margin-bottom: 0.5rem !important;
+    gap: 0.75rem !important;
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .event-report-header-main {
+    width: 100%;
+  }
+
+  .event-report-actions {
+    width: 100%;
+  }
+
+  .event-report-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  .event-photo-item {
+    grid-template-columns: 1fr !important;
+  }
+
+  .event-photo-item img {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 240px;
+  }
+
+  .event-modal-card {
+    max-width: 100% !important;
+  }
+
+  .events-table {
+    min-width: 760px;
+  }
 }

@@ -58,10 +58,15 @@ export default function Agenda() {
 
     const handleSavePersona = async (data: any) => {
         try {
+            const payload = {
+                ...data,
+                correo: data?.correo || null,
+                empresa_id: data?.empresa_id || null,
+            };
             if (editingPersona?.id) {
-                await updatePersona(editingPersona.id, data);
+                await updatePersona(editingPersona.id, payload);
             } else {
-                await createPersona(data);
+                await createPersona(payload);
             }
             setShowPersonaModal(false);
             setEditingPersona(null);
@@ -196,6 +201,7 @@ export default function Agenda() {
                                         <th style={{ textAlign: 'left' }}>Nombre</th>
                                         <th style={{ textAlign: 'left' }}>Apellidos</th>
                                         <th style={{ textAlign: 'left' }}>Tipo</th>
+                                        <th style={{ textAlign: 'left' }}>Correo Electrónico</th>
                                         <th style={{ textAlign: 'left' }}>Empresa</th>
                                         <th style={{ width: '100px', textAlign: 'center' }}>Acciones</th>
                                     </tr>
@@ -203,7 +209,7 @@ export default function Agenda() {
                                 <tbody>
                                     {personas.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                            <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                                                 No hay personas registradas
                                             </td>
                                         </tr>
@@ -213,6 +219,7 @@ export default function Agenda() {
                                             <td><strong>{per.nombre}</strong></td>
                                             <td>{per.apellidos}</td>
                                             <td><span className="badge badge-en-curso">{per.tipo}</span></td>
+                                            <td>{per.correo || '-'}</td>
                                             <td>{getEmpresaName(per.empresa_id)}</td>
                                             <td>
                                                 <div className="flex justify-center gap-2">

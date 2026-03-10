@@ -30,6 +30,54 @@ export const createActaPdfUrl = async (
 
   const v = (camel: string, snake: string) => eventData?.[camel] ?? eventData?.[snake] ?? '';
 
+  const normalizePhotoLayoutType = (value: any): 'foto' | 'libro_incidencias' | 'otros_documentos' => {
+    const normalized = String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\s-]+/g, '_');
+    if (!normalized) return 'foto';
+    if (
+      normalized === 'libro_incidencias' ||
+      normalized === 'libroincidencias' ||
+      normalized === 'libro' ||
+      normalized.includes('libro')
+    ) {
+      return 'libro_incidencias';
+    }
+    if (
+      normalized === 'otros_documentos' ||
+      normalized === 'otrosdocumentos' ||
+      normalized === 'otros' ||
+      normalized.includes('otro')
+    ) {
+      return 'otros_documentos';
+    }
+    return 'foto';
+  };
+
+  const normalizeFotos = (raw: any[]): Array<{ id: any; url: string; tipo: 'foto' | 'libro_incidencias' | 'otros_documentos'; descripcion: string }> => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((photo: any, index: number) => {
+        const url = photo?.url || photo?.dataUrl || photo?.data_url || '';
+        if (!url || !String(url).startsWith('data:image')) return null;
+        return {
+          id: photo?.id ?? index,
+          url: String(url),
+          tipo: normalizePhotoLayoutType(photo?.tipo ?? photo?.tipoFoto ?? photo?.layoutType ?? photo?.section),
+          descripcion:
+            typeof photo?.descripcion === 'string'
+              ? photo.descripcion
+              : typeof photo?.description === 'string'
+                ? photo.description
+                : '',
+        };
+      })
+      .filter(Boolean) as Array<{ id: any; url: string; tipo: 'foto' | 'libro_incidencias' | 'otros_documentos'; descripcion: string }>;
+  };
+
   docDefinition.content.push({
     text: `Acta de ${tipo === 'reunion' ? 'Reunion' : 'Visita'}`,
     style: 'header',
@@ -79,21 +127,104 @@ export const createActaPdfUrl = async (
     addField('Accidentes reportados', v('accidentes', 'accidentes'));
   }
 
-  const fotos = v('fotos', 'fotos');
-  if (Array.isArray(fotos) && fotos.length > 0) {
+  let forcePageBreakBeforeFirmas = false;
+  const fotos = normalizeFotos(v('fotos', 'fotos'));
+  if (fotos.length > 0) {
+    const fotosNormales = fotos.filter((f) => f.tipo === 'foto');
+    const fotosLibroIncidencias = fotos.filter((f) => f.tipo === 'libro_incidencias');
+    const fotosOtrosDocumentos = fotos.filter((f) => f.tipo === 'otros_documentos');
+
     docDefinition.content.push({
       text: 'Reporte Fotografico',
       style: 'subheader',
       margin: [0, 20, 0, 10],
       pageBreak: 'before',
     });
-    for (let i = 0; i < fotos.length; i += 2) {
-      const col = [];
-      const img1 = fotos[i]?.url;
-      col.push(img1 && img1.startsWith('data:image') ? { image: img1, width: 240, margin: [0, 10, 10, 10] } : { text: '' });
-      const img2 = fotos[i + 1]?.url;
-      col.push(img2 && img2.startsWith('data:image') ? { image: img2, width: 240, margin: [0, 10, 0, 10] } : { text: '' });
-      docDefinition.content.push({ columns: col });
+
+    let hasPreviousPhotoSection = false;
+
+    if (fotosNormales.length > 0) {
+      docDefinition.content.push({
+        text: 'Fotos',
+        style: 'subheader',
+        margin: [0, 5, 0, 8],
+      });
+      fotosNormales.forEach((photo) => {
+        docDefinition.content.push({
+          image: photo.url,
+          fit: [500, 320],
+          margin: [0, 6, 0, 4],
+          alignment: 'left',
+        });
+        if (photo.descripcion?.trim()) {
+          docDefinition.content.push({
+            text: photo.descripcion.trim(),
+            style: 'text',
+            margin: [0, 0, 0, 10],
+          });
+        }
+      });
+      hasPreviousPhotoSection = true;
+    }
+
+    if (fotosLibroIncidencias.length > 0) {
+      docDefinition.content.push({
+        text: 'Libro de incidencias',
+        style: 'subheader',
+        margin: [0, 5, 0, 8],
+        pageBreak: hasPreviousPhotoSection ? 'before' : undefined,
+      });
+      fotosLibroIncidencias.forEach((photo, index) => {
+        const photoStack: any[] = [
+          {
+            image: photo.url,
+            fit: [510, 620],
+            margin: [0, 6, 0, 4],
+            alignment: 'center',
+          },
+        ];
+        if (photo.descripcion?.trim()) {
+          photoStack.push({
+            text: photo.descripcion.trim(),
+            style: 'text',
+            margin: [0, 0, 0, 10],
+          });
+        }
+        // El título de sección ya puede forzar salto. Para no dejarlo solo en una página,
+        // la primera imagen no añade salto adicional.
+        const shouldBreakBeforePhoto = index > 0;
+        docDefinition.content.push({
+          stack: photoStack,
+          unbreakable: true,
+          pageBreak: shouldBreakBeforePhoto ? 'before' : undefined,
+        });
+      });
+      forcePageBreakBeforeFirmas = true;
+      hasPreviousPhotoSection = true;
+    }
+
+    if (fotosOtrosDocumentos.length > 0) {
+      docDefinition.content.push({
+        text: 'Otros documentos',
+        style: 'subheader',
+        margin: [0, 5, 0, 8],
+        pageBreak: hasPreviousPhotoSection ? 'before' : undefined,
+      });
+      fotosOtrosDocumentos.forEach((photo) => {
+        docDefinition.content.push({
+          image: photo.url,
+          fit: [500, 320],
+          margin: [0, 6, 0, 4],
+          alignment: 'left',
+        });
+        if (photo.descripcion?.trim()) {
+          docDefinition.content.push({
+            text: photo.descripcion.trim(),
+            style: 'text',
+            margin: [0, 0, 0, 10],
+          });
+        }
+      });
     }
   }
 
@@ -103,6 +234,7 @@ export const createActaPdfUrl = async (
       text: tipo === 'reunion' ? 'Firmas de Asistentes' : 'Asistentes y Firmas',
       style: 'subheader',
       margin: [0, 30, 0, 10],
+      pageBreak: forcePageBreakBeforeFirmas ? 'before' : undefined,
     });
     for (let i = 0; i < firmas.length; i += 3) {
       const columns = [];
@@ -132,3 +264,19 @@ export const createActaPdfUrl = async (
   return URL.createObjectURL(blob);
 };
 
+export const createActaPdfBlob = async (
+  tipo: 'reunion' | 'visita',
+  eventData: any,
+  obra: any
+): Promise<Blob> => {
+  const url = await createActaPdfUrl(tipo, eventData, obra);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('No se pudo obtener el PDF generado.');
+    }
+    return await response.blob();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
