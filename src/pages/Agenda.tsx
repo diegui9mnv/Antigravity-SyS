@@ -95,7 +95,7 @@ export default function Agenda() {
     return (
         <>
             <div className="page-container animate-fade-in" style={{ padding: '2rem 0' }}>
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-6 agenda-header" style={{ gap: '1rem', flexWrap: 'wrap' }}>
                     <h1 className="text-2xl font-bold flex items-center gap-2">
                         <Users size={28} style={{ color: 'var(--primary)' }} />
                         Agenda de Contactos
@@ -112,7 +112,7 @@ export default function Agenda() {
                     )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border)' }}>
+                <div className="agenda-tabs" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-color)' }}>
                     <button
                         onClick={() => setActiveTab('empresas')}
                         style={{
@@ -149,7 +149,7 @@ export default function Agenda() {
 
                 {activeTab === 'empresas' && (
                     <div className="card">
-                        <div className="table-responsive">
+                        <div className="table-container" style={{ margin: 0 }}>
                             <table className="table w-full">
                                 <thead>
                                     <tr>
@@ -194,7 +194,7 @@ export default function Agenda() {
 
                 {activeTab === 'personas' && (
                     <div className="card">
-                        <div className="table-responsive">
+                        <div className="table-container" style={{ margin: 0 }}>
                             <table className="table w-full">
                                 <thead>
                                     <tr>

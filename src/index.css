@@ -56,6 +56,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
 /* Typography */
 h1,
 h2,
@@ -322,6 +337,47 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.main-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.main-nav-account {
+  margin-left: 1rem;
+  border-left: 1px solid var(--border-color);
+  padding-left: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.main-nav-user {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.main-nav-logout {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.main-nav-logout-mobile {
+  display: none;
 }
 
 .logo-area {
@@ -347,7 +403,7 @@ a:hover {
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -362,6 +418,10 @@ a:hover {
   border: 1px solid var(--border-color);
   background-color: var(--color-background);
   box-shadow: var(--shadow-sm);
+}
+
+.table-responsive {
+  overflow-x: auto;
 }
 
 .table {
@@ -402,16 +462,21 @@ a:hover {
   justify-content: flex-end;
 }
 
+.app-modal-overlay {
+  overscroll-behavior: contain;
+}
+
 /* Responsive Grid Adjustments */
 @media (max-width: 768px) {
   .project-details-grid {
     grid-template-columns: 1fr !important;
     height: auto !important;
-    min-height: auto !important;
+    min-height: 0 !important;
+    gap: 1rem !important;
   }
 
   .project-details-grid>* {
-    min-height: 400px;
+    min-height: 0;
   }
 }
 
@@ -443,6 +508,7 @@ a:hover {
 }
 
 @media (max-width: 768px) {
+
   .container,
   .container-fluid {
     padding: 0 0.75rem;
@@ -452,6 +518,17 @@ a:hover {
   .card-body,
   .card-footer {
     padding: 0.9rem;
+  }
+
+  .btn {
+    font-size: 0.82rem;
+    padding: 0.42rem 0.68rem;
+    gap: 0.4rem;
+  }
+
+  .btn svg {
+    width: 15px;
+    height: 15px;
   }
 
   .event-report-root {
@@ -492,7 +569,204 @@ a:hover {
     max-width: 100% !important;
   }
 
+  .create-project-card {
+    max-width: 100% !important;
+  }
+
+  .create-project-typology-grid,
+  .create-project-general-grid,
+  .create-project-dates-grid,
+  .create-project-agents-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .create-project-typology-grid>*,
+  .create-project-general-grid>*,
+  .create-project-dates-grid>*,
+  .create-project-agents-grid>* {
+    min-width: 0;
+  }
+
+  .create-project-duration-row {
+    flex-wrap: wrap;
+  }
+
   .events-table {
-    min-width: 760px;
+    min-width: 680px;
+  }
+
+  .events-actions-group {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem !important;
+    width: 100%;
+    max-width: 6.5rem;
+    margin: 0 auto;
+  }
+
+  .events-actions-group .event-action-btn {
+    width: 100%;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+    padding: 0.45rem !important;
+    justify-content: center;
+  }
+
+  .events-actions-group .event-action-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .project-topbar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem;
+  }
+
+  .project-topbar-actions {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem !important;
+  }
+
+  .project-topbar-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .project-summary {
+    padding: 0.85rem !important;
+  }
+
+  .project-summary-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.6rem;
+  }
+
+  .project-status-actions {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .project-summary-meta {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
+
+  .agenda-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 0.35rem;
+    margin-bottom: 1.25rem !important;
+  }
+
+  .agenda-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .plantillas-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .plantillas-category-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+
+  .projects-list-actions {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .projects-list-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 920px) {
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7rem;
+  }
+
+  .main-nav {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .main-nav-links {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 0.25rem;
+  }
+
+  .main-nav-links .btn {
+    flex: 0 0 auto;
+  }
+
+  .main-nav-logout-mobile {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #fff;
+    background-color: #dc2626;
+    border: 1px solid #b91c1c;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .main-nav-logout-mobile:hover {
+    color: #fff;
+    background-color: #b91c1c;
+    border-color: #991b1b;
+  }
+
+  .main-nav-account {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.6rem;
+    justify-content: space-between;
+  }
+
+  .main-nav-user {
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .main-nav-account .main-nav-logout {
+    display: none;
+  }
+
+  .app-modal-overlay {
+    align-items: flex-start !important;
+    justify-content: center !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .report-email-overlay {
+    padding-top: clamp(4.5rem, 16vh, 7.5rem) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .project-topbar-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  .main-nav-account {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
   }
 }

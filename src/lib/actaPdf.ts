@@ -13,11 +13,65 @@ try {
   console.error('Error inicializando fuentes de pdfMake:', e);
 }
 
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('No se pudo leer el logo de cabecera.'));
+    reader.readAsDataURL(blob);
+  });
+
+const loadActaHeaderLogo = async (): Promise<string | null> => {
+  const candidates = [
+    '/cemosa-logo.png',
+    '/cemosa-logo.jpg',
+    '/cemosa-logo.jpeg',
+    '/cemosa-logo.webp',
+    '/cemosa-logo.svg',
+    '/branding/cemosa-logo.png',
+    '/branding/cemosa-logo.jpg',
+    '/branding/cemosa-logo.jpeg',
+    '/branding/cemosa-logo.webp',
+    '/branding/cemosa-logo.svg',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(candidate, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) continue;
+      return await blobToDataUrl(blob);
+    } catch {
+      // Try next candidate
+    }
+  }
+
+  return null;
+};
+
+const formatHeaderDate = (value: any): string => {
+  if (!value) {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
+};
+
+const buildActaHeaderTitle = (tipo: 'reunion' | 'visita'): string =>
+  tipo === 'reunion'
+    ? 'ACTA DE REUNION DE COORDINACION SEGURIDAD Y SALUD'
+    : 'ACTA DE VISITA DE COORDINACION SEGURIDAD Y SALUD';
+
 export const createActaPdfUrl = async (
   tipo: 'reunion' | 'visita',
   eventData: any,
   obra: any
 ): Promise<string> => {
+  const logoDataUrl = await loadActaHeaderLogo();
+
   const docDefinition: any = {
     content: [],
     styles: {
@@ -29,6 +83,9 @@ export const createActaPdfUrl = async (
   };
 
   const v = (camel: string, snake: string) => eventData?.[camel] ?? eventData?.[snake] ?? '';
+  const expedienteValue = obra?.expediente || obra?.codigoObra || '-';
+  const informeValue = eventData?.titulo || eventData?.title || '-';
+  const fechaActual = formatHeaderDate(new Date());
 
   const normalizePhotoLayoutType = (value: any): 'foto' | 'libro_incidencias' | 'otros_documentos' => {
     const normalized = String(value ?? '')
@@ -79,16 +136,71 @@ export const createActaPdfUrl = async (
   };
 
   docDefinition.content.push({
-    text: `Acta de ${tipo === 'reunion' ? 'Reunion' : 'Visita'}`,
-    style: 'header',
-    alignment: 'center',
+    table: {
+      widths: [200, '*'],
+      body: [[
+        {
+          stack: logoDataUrl
+            ? [{
+              image: logoDataUrl,
+              fit: [160, 42],
+              alignment: 'center',
+              margin: [0, 2, 0, 0],
+            }]
+            : [
+              { text: 'cemosa', color: '#2563eb', bold: true, fontSize: 28, margin: [0, 1, 0, 0] },
+              { text: 'Ingenieria y Control', color: '#2563eb', italics: true, fontSize: 11, margin: [2, -2, 0, 0] },
+            ],
+          margin: [0, 2, 0, 2],
+        },
+        {
+          stack: [
+            {
+              text: buildActaHeaderTitle(tipo),
+              alignment: 'center',
+              bold: true,
+              fontSize: 10,
+              margin: [0, 0, 0, 4],
+            },
+            {
+              columns: [
+                { width: 78, text: 'Expediente:', bold: true, fontSize: 9, alignment: 'right', margin: [0, 0, 4, 0], color: '#111827' },
+                { text: String(expedienteValue), fontSize: 9, color: '#374151' },
+              ],
+              margin: [0, 0, 0, 0],
+            },
+            {
+              columns: [
+                { width: 78, text: 'Informe:', bold: true, fontSize: 9, alignment: 'right', margin: [0, 0, 4, 0], color: '#111827' },
+                { text: String(informeValue), fontSize: 9, color: '#374151' },
+              ],
+              margin: [0, 0, 0, 0],
+            },
+            {
+              columns: [
+                { width: 78, text: 'Fecha actual:', bold: true, fontSize: 9, alignment: 'right', margin: [0, 0, 4, 0], color: '#111827' },
+                { text: fechaActual, fontSize: 9, color: '#374151' },
+              ],
+              margin: [0, 0, 0, 0],
+            },
+          ],
+          margin: [0, 2, 0, 2],
+        },
+      ]],
+    },
+    layout: {
+      hLineWidth: (i: number, node: any) => (i === node.table.body.length ? 0.9 : 0),
+      vLineWidth: () => 0,
+      hLineColor: () => '#9ca3af',
+    },
+    margin: [6, 0, 6, 8],
   });
   docDefinition.content.push({
     text: obra?.denominacion || '',
     alignment: 'center',
-    margin: [0, 0, 0, 20],
+    margin: [0, 0, 0, 10],
     color: '#6b7280',
-    fontSize: 14,
+    fontSize: 11,
   });
 
   const addField = (label: string, value: any) => {
@@ -113,6 +225,8 @@ export const createActaPdfUrl = async (
     addField('Fecha y Hora', v('fechaHora', 'fecha_hora'));
     addField('Ubicacion', v('ubicacion', 'ubicacion'));
     addField('Tipo de Obra', v('tipoObra', 'tipo_obra'));
+    addField('Recurso Preventivo', v('recursoPreventivo', 'recurso_preventivo'));
+    addField('Numero de Trabajadores', v('nTrabajadores', 'n_trabajadores'));
     addField('Subcontratas / Autonomos', v('subcontratas', 'subcontratas'));
     addField('Trabajos en Curso', v('trabajosEnCurso', 'trabajos_en_curso'));
     addField('Unidades en Ejecucion', v('unidadesEjecucion', 'unidades_ejecucion'));

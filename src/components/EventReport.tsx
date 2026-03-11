@@ -323,9 +323,11 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         try {
             const actaBlob = await createActaPdfBlob(tipo, formData, obra);
             const actaBase64 = await blobToBase64(actaBlob);
+            const endpoint =
+                import.meta.env.VITE_EMAIL_NOTIFICATION_ENDPOINT || '/.netlify/functions/send-event-notification';
 
             const response = await fetch(
-                import.meta.env.VITE_EMAIL_NOTIFICATION_ENDPOINT || '/.netlify/functions/send-event-notification',
+                endpoint,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -359,16 +361,41 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                 }
             );
 
-            const result = await response.json().catch(() => null);
+            const rawResponseBody = await response.text();
+            let result: any = null;
+            try {
+                result = rawResponseBody ? JSON.parse(rawResponseBody) : null;
+            } catch {
+                result = null;
+            }
+
             if (!response.ok) {
-                throw new Error(result?.error || 'No se pudo enviar el correo.');
+                let message = result?.error || `No se pudo enviar el correo (HTTP ${response.status}).`;
+
+                if (
+                    response.status === 404 &&
+                    endpoint === '/.netlify/functions/send-event-notification' &&
+                    import.meta.env.DEV
+                ) {
+                    message =
+                        'No se encontro la funcion de envio de correo en local. Ejecuta con Netlify Dev (netlify dev) o define VITE_EMAIL_NOTIFICATION_ENDPOINT.';
+                }
+
+                if (rawResponseBody && !result) {
+                    message = `${message} Respuesta: ${rawResponseBody.slice(0, 180)}`;
+                }
+
+                throw new Error(message);
             }
 
             alert(`Correo enviado correctamente a ${recipients.length} destinatario(s).`);
             setIsEmailModalOpen(false);
         } catch (error: any) {
             console.error('Error enviando correo de notificacion:', error);
-            alert(error?.message || 'No se pudo enviar la notificacion por correo.');
+            const message =
+                error?.message ||
+                'No se pudo enviar la notificacion por correo. Revisa SMTP_* en Netlify y que la funcion este disponible.';
+            alert(message);
         } finally {
             setIsSendingEmail(false);
         }
@@ -738,7 +765,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                                 <input type="number" value={formData.nTrabajadores} onChange={e => handleChange('nTrabajadores', e.target.value)} className="input-field" />
                                             </div>
                                             <div className="input-group">
-                                                <label className="input-label">Recurso Preventivo PRESENTE (SÍ/NO y DNI)</label>
+                                                <label className="input-label">Recurso Preventivo</label>
                                                 <input type="text" value={formData.recursoPreventivo} onChange={e => handleChange('recursoPreventivo', e.target.value)} className="input-field" />
                                             </div>
                                         </div>
@@ -1110,6 +1137,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
             </div>
             {isEmailModalOpen && (
                 <div
+                    className="app-modal-overlay report-email-overlay"
                     style={{
                         position: 'fixed',
                         inset: 0,

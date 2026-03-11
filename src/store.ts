@@ -345,8 +345,8 @@ export const fileStructureTemplate = [
     name: "Visitas, Reuniones y Anotaciones LI",
     type: "folder",
     children: [
-      { id: "cat-reuniones", name: "Reuniones", type: "category" },
       { id: "cat-visitas", name: "Visitas", type: "category" },
+      { id: "cat-reuniones", name: "Reuniones", type: "category" },
       { id: "cat-li", name: "Anotaciones LI", type: "category" }
     ]
   },

@@ -191,11 +191,14 @@ export const handler = async (event) => {
     };
   } catch (error) {
     console.error('Error sending notification email:', error);
+    const detail = error?.message ? String(error.message) : '';
+    const code = error?.code ? String(error.code) : '';
+    const composed = [code, detail].filter(Boolean).join(' - ');
     return {
       statusCode: 500,
       headers: responseHeaders,
       body: JSON.stringify({
-        error: 'Error al enviar el correo.',
+        error: composed ? `Error al enviar el correo. ${composed}` : 'Error al enviar el correo.',
       }),
     };
   }

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save, RotateCw, Copy } from 'lucide-react';
 import { updateObra as updateObraLocal, fileStructureTemplate, getPlantillasByCategory } from '../store';
@@ -510,11 +510,13 @@ export default function ProjectDetails() {
     const [eventTypeToCreate, setEventTypeToCreate] = useState<'reunion' | 'visita'>('visita');
     const [eventModalInitialData, setEventModalInitialData] = useState<any>(null);
     const [duplicateSourceEvent, setDuplicateSourceEvent] = useState<any>(null);
+    const [eventModalAnchorTop, setEventModalAnchorTop] = useState<number | null>(null);
 
     // Contactos View State
     const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
     const [isLibroModalOpen, setIsLibroModalOpen] = useState(false);
+    const [libroModalAnchorTop, setLibroModalAnchorTop] = useState<number | null>(null);
     const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
     const [isQuickUploadModalOpen, setIsQuickUploadModalOpen] = useState(false);
     const [quickUploadCategoryId, setQuickUploadCategoryId] = useState('');
@@ -547,6 +549,7 @@ export default function ProjectDetails() {
         id: '',
         isCoreRole: false
     });
+    const libroModalRestoreScrollRef = useRef<number | null>(null);
 
     const quickUploadCategories = useMemo(
         () => collectCategoryOptions(fileStructureTemplate),
@@ -886,6 +889,7 @@ export default function ProjectDetails() {
         setEditingContactId(null);
         setEventModalInitialData(null);
         setDuplicateSourceEvent(null);
+        setEventModalAnchorTop(null);
         return savedEventId;
     };
 
@@ -1075,12 +1079,70 @@ export default function ProjectDetails() {
         }
     };
 
-    const openDuplicateEventModal = (type: 'reunion' | 'visita', row: any) => {
+    const resolveEventModalAnchorTop = (triggerElement?: HTMLElement | null): number | null => {
+        if (typeof window === 'undefined' || !triggerElement) return null;
+        if (window.innerWidth > 920) return null; // keep centered on desktop
+        const triggerRect = triggerElement.getBoundingClientRect();
+        return Math.max(10, Math.round(triggerRect.top));
+    };
+
+    const resolveLibroModalAnchorTop = (triggerElement?: HTMLElement | null): number | null => {
+        if (typeof window === 'undefined' || !triggerElement) return null;
+        if (window.innerWidth > 920) return null;
+        const triggerRect = triggerElement.getBoundingClientRect();
+        return Math.max(10, Math.round(triggerRect.top));
+    };
+
+    const openLibroModal = (triggerElement?: HTMLElement | null) => {
+        if (typeof window !== 'undefined' && window.innerWidth <= 920) {
+            libroModalRestoreScrollRef.current = window.scrollY;
+        } else {
+            libroModalRestoreScrollRef.current = null;
+        }
+        setLibroModalAnchorTop(resolveLibroModalAnchorTop(triggerElement));
+        setIsLibroModalOpen(true);
+    };
+
+    const closeLibroModal = () => {
+        setIsLibroModalOpen(false);
+        setLibroModalAnchorTop(null);
+        const restoreTop = libroModalRestoreScrollRef.current;
+        libroModalRestoreScrollRef.current = null;
+        if (typeof window !== 'undefined' && typeof restoreTop === 'number' && window.innerWidth <= 920) {
+            window.setTimeout(() => {
+                window.scrollTo({ top: restoreTop, behavior: 'smooth' });
+            }, 100);
+        }
+    };
+
+    const openCreateEventModal = (type: 'reunion' | 'visita', triggerElement?: HTMLElement | null) => {
+        setEventTypeToCreate(type);
+        setActiveEvent(null);
+        setEditingContactId(null);
+        setEventModalInitialData(null);
+        setDuplicateSourceEvent(null);
+        setEventModalAnchorTop(resolveEventModalAnchorTop(triggerElement));
+        setIsEventModalOpen(true);
+    };
+
+    const openEditEventModal = (type: 'reunion' | 'visita', row: any, triggerElement?: HTMLElement | null) => {
+        setActiveReportType(type);
+        setActiveEvent(null);
+        setEditingContactId(row.id);
+        setEventTypeToCreate(type);
+        setEventModalInitialData(row);
+        setDuplicateSourceEvent(null);
+        setEventModalAnchorTop(resolveEventModalAnchorTop(triggerElement));
+        setIsEventModalOpen(true);
+    };
+
+    const openDuplicateEventModal = (type: 'reunion' | 'visita', row: any, triggerElement?: HTMLElement | null) => {
         setEventTypeToCreate(type);
         setEditingContactId(null);
         setDuplicateSourceEvent(row);
         setEventModalInitialData(buildDuplicateEventDraft(row));
         setActiveEvent(null);
+        setEventModalAnchorTop(resolveEventModalAnchorTop(triggerElement));
         setIsEventModalOpen(true);
     };
 
@@ -1126,7 +1188,7 @@ export default function ProjectDetails() {
         saveAs(content, `Documentacion_${obra.codigoObra}.zip`);
     };
 
-    const renderEventsTable = (type: 'reunion' | 'visita', events: any[], onAdd: () => void) => {
+    const renderEventsTable = (type: 'reunion' | 'visita', events: any[]) => {
 
         return (
             <Card style={{ backgroundColor: 'white', padding: '1.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
@@ -1134,13 +1196,8 @@ export default function ProjectDetails() {
                     <h4 style={{ margin: 0, fontSize: '1rem' }}>
                         {type === 'reunion' ? `Reuniones (${events.length})` : `Visitas (${events.length})`}
                     </h4>
-                    <Button onClick={() => {
-                        setEventTypeToCreate(type);
-                        setActiveEvent(null);
-                        setEditingContactId(null);
-                        setEventModalInitialData(null);
-                        setDuplicateSourceEvent(null);
-                        onAdd();
+                    <Button onClick={(e) => {
+                        openCreateEventModal(type, e.currentTarget);
                     }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
                         {type === 'reunion' ? '+ Nueva Reunión' : '+ Nueva Visita'}
                     </Button>
@@ -1179,32 +1236,25 @@ export default function ProjectDetails() {
                                         <td style={{ textAlign: 'center' }}><Badge status={row.estado || 'Planificada'}>{row.estado || 'Planificada'}</Badge></td>
                                         <td>{formatAgentName(getEventCoordinatorId(row), 'persona')}</td>
                                         <td style={{ textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                            <div className="events-actions-group" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                                                 {hasGeneratedActa(row) && (
                                                     <button onClick={async (e) => {
                                                         e.stopPropagation();
                                                         await handleOpenActaPreview(type, row);
-                                                    }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
+                                                    }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
                                                         <FileText size={18} />
                                                     </button>
                                                 )}
                                                 <button onClick={(e) => {
                                                     e.stopPropagation();
-                                                    // Abre el modal de eventos con los datos actuales para editar
-                                                    setActiveReportType(type);
-                                                    setActiveEvent(null);
-                                                    setEditingContactId(row.id);
-                                                    setEventTypeToCreate(type);
-                                                    setEventModalInitialData(row);
-                                                    setDuplicateSourceEvent(null);
-                                                    setIsEventModalOpen(true);
-                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
+                                                    openEditEventModal(type, row, e.currentTarget as HTMLElement);
+                                                }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                     <Edit2 size={18} />
                                                 </button>
                                                 <button onClick={(e) => {
                                                     e.stopPropagation();
-                                                    openDuplicateEventModal(type, row);
-                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
+                                                    openDuplicateEventModal(type, row, e.currentTarget as HTMLElement);
+                                                }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
                                                     <Copy size={18} />
                                                 </button>
                                                 <button onClick={async (e) => {
@@ -1217,7 +1267,7 @@ export default function ProjectDetails() {
                                                             setVisitas(await getEventos(id!, 'visita'));
                                                         }
                                                     }
-                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
+                                                }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
                                                     <Trash2 size={18} />
                                                 </button>
                                             </div>
@@ -1255,11 +1305,11 @@ export default function ProjectDetails() {
     return (
         <>
             <div className="animate-fade-in">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div className="project-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                     <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)' }}>
                         <ArrowLeft size={16} /> Volver a Obras
                     </Link>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div className="project-topbar-actions" style={{ display: 'flex', gap: '0.5rem' }}>
                         <Button
                             variant="outline"
                             onClick={() => {
@@ -1279,18 +1329,18 @@ export default function ProjectDetails() {
                     </div>
                 </div>
 
-                <div className="flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                <div className="project-summary flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
                     <div>
-                        <div className="flex items-center gap-4 mb-2">
+                        <div className="project-summary-header flex items-center gap-4 mb-2">
                             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', letterSpacing: '-0.025em' }}>{obra.denominacion}</h1>
-                            <div className="flex items-center gap-2">
+                            <div className="project-status-actions flex items-center gap-2">
                                 <Badge status={badgeStatusForObra(obra.estado)}>{formatObraStatus(obra.estado)}</Badge>
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={handleCycleObraStatus}
                                     disabled={isStatusUpdating}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'normal', textAlign: 'left' }}
                                     title={`Cambiar a ${formatObraStatus(getNextObraStatus(obra.estado))}`}
                                 >
                                     <RotateCw size={14} />
@@ -1299,7 +1349,7 @@ export default function ProjectDetails() {
                                 {obra.tipologia && <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 500, marginLeft: '0.25rem' }}>{obra.tipologia}</span>}
                             </div>
                         </div>
-                        <div className="flex gap-4" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                        <div className="project-summary-meta flex gap-4" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
                             <span>Ref: {obra.codigoObra}</span>
                             <span>Exp: {obra.expediente}</span>
                             {obra.cebe && <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>CEBE: {obra.cebe}</span>}
@@ -1318,97 +1368,97 @@ export default function ProjectDetails() {
                 <div className="project-details-grid" style={{ display: 'grid', gridTemplateColumns: isSidebarOpen ? 'minmax(280px, 1fr) 3fr' : 'auto 1fr', gap: '2rem', height: 'calc(100vh - 220px)', minHeight: '600px', transition: 'grid-template-columns 0.3s ease' }}>
                     {/* Document Tree Sidebar */}
                     <Card style={{ height: '100%', display: 'flex', flexDirection: 'column', width: isSidebarOpen ? 'auto' : 'fit-content' }}>
-                            <div className={`flex ${isSidebarOpen ? 'justify-between' : 'justify-center'} items-center`} style={{ padding: '1rem', paddingBottom: '0.5rem', borderBottom: isSidebarOpen ? '1px solid var(--border-color)' : 'none' }}>
-                                {isSidebarOpen && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0.5rem', flex: 1, minWidth: 0 }}>
+                        <div className={`flex ${isSidebarOpen ? 'justify-between' : 'justify-center'} items-center`} style={{ padding: '1rem', paddingBottom: '0.5rem', borderBottom: isSidebarOpen ? '1px solid var(--border-color)' : 'none' }}>
+                            {isSidebarOpen && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0.5rem', flex: 1, minWidth: 0 }}>
+                                    <button
+                                        onClick={() => {
+                                            setActiveCategory(null);
+                                            setFolderStack([]);
+                                            setActiveEvent(null);
+                                        }}
+                                        style={{
+                                            fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                            background: 'white', border: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--color-primary-dark)',
+                                            fontWeight: 600, padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)',
+                                            outline: 'none', transition: 'all var(--transition-fast)', boxShadow: 'var(--shadow-sm)'
+                                        }}
+                                        className="hover:bg-surface-hover"
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.borderColor = 'var(--color-primary)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                                        }}
+                                        title="Ir al resumen global"
+                                    >
+                                        <Folders size={18} /> Árbol Documental
+                                    </button>
+                                    {otrosTreeNode && (
                                         <button
                                             onClick={() => {
-                                                setActiveCategory(null);
+                                                setActiveCategory(otrosTreeNode);
                                                 setFolderStack([]);
                                                 setActiveEvent(null);
                                             }}
                                             style={{
-                                                fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                                background: 'white', border: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--color-primary-dark)',
-                                                fontWeight: 600, padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)',
-                                                outline: 'none', transition: 'all var(--transition-fast)', boxShadow: 'var(--shadow-sm)'
+                                                fontSize: '0.85rem',
+                                                background: isOtrosActive ? 'var(--color-surface-hover)' : 'white',
+                                                border: `1px solid ${isOtrosActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                                cursor: 'pointer',
+                                                color: 'var(--color-primary-dark)',
+                                                fontWeight: 600,
+                                                padding: '0.45rem 0.75rem',
+                                                borderRadius: 'var(--radius-md)',
+                                                outline: 'none',
+                                                transition: 'all var(--transition-fast)',
+                                                boxShadow: 'var(--shadow-sm)',
+                                                whiteSpace: 'nowrap'
                                             }}
                                             className="hover:bg-surface-hover"
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.borderColor = 'var(--color-primary)';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.borderColor = 'var(--border-color)';
-                                            }}
-                                            title="Ir al resumen global"
+                                            title="Acceso rápido a Otros"
                                         >
-                                            <Folders size={18} /> Árbol Documental
+                                            Otros
                                         </button>
-                                        {otrosTreeNode && (
-                                            <button
-                                                onClick={() => {
-                                                    setActiveCategory(otrosTreeNode);
-                                                    setFolderStack([]);
-                                                    setActiveEvent(null);
-                                                }}
-                                                style={{
-                                                    fontSize: '0.85rem',
-                                                    background: isOtrosActive ? 'var(--color-surface-hover)' : 'white',
-                                                    border: `1px solid ${isOtrosActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                                                    cursor: 'pointer',
-                                                    color: 'var(--color-primary-dark)',
-                                                    fontWeight: 600,
-                                                    padding: '0.45rem 0.75rem',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    outline: 'none',
-                                                    transition: 'all var(--transition-fast)',
-                                                    boxShadow: 'var(--shadow-sm)',
-                                                    whiteSpace: 'nowrap'
-                                                }}
-                                                className="hover:bg-surface-hover"
-                                                title="Acceso rápido a Otros"
-                                            >
-                                                Otros
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                <button
-                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                    title={isSidebarOpen ? "Ocultar panel" : "Mostrar panel"}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: '0.5rem',
-                                        borderRadius: '0.375rem',
-                                        backgroundColor: 'transparent',
-                                        color: 'var(--text-main)',
-                                        border: '1px solid transparent',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                    }}
-                                    className="hover:bg-surface-hover hover:border-border"
-                                >
-                                    <Menu size={20} />
-                                </button>
-                            </div>
-                            {isSidebarOpen && (
-                                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.85rem' }}>
-                                    {mainTreeNodes.map((node) => (
-                                        <DocumentTreeNode
-                                            key={node.id}
-                                            node={node}
-                                            activeCategoryId={activeCategory?.id}
-                                            onSelectCategory={setActiveCategory}
-                                            activeFolder={activeFolder}
-                                            setFolderStack={setFolderStack}
-                                            onClearEvent={() => setActiveEvent(null)}
-                                            allObraFiles={allObraFiles}
-                                        />
-                                    ))}
+                                    )}
                                 </div>
                             )}
+                            <button
+                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                title={isSidebarOpen ? "Ocultar panel" : "Mostrar panel"}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '0.5rem',
+                                    borderRadius: '0.375rem',
+                                    backgroundColor: 'transparent',
+                                    color: 'var(--text-main)',
+                                    border: '1px solid transparent',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                }}
+                                className="hover:bg-surface-hover hover:border-border"
+                            >
+                                <Menu size={20} />
+                            </button>
+                        </div>
+                        {isSidebarOpen && (
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 0.85rem' }}>
+                                {mainTreeNodes.map((node) => (
+                                    <DocumentTreeNode
+                                        key={node.id}
+                                        node={node}
+                                        activeCategoryId={activeCategory?.id}
+                                        onSelectCategory={setActiveCategory}
+                                        activeFolder={activeFolder}
+                                        setFolderStack={setFolderStack}
+                                        onClearEvent={() => setActiveEvent(null)}
+                                        allObraFiles={allObraFiles}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </Card>
 
                     {/* Content Area */}
@@ -1459,12 +1509,12 @@ export default function ProjectDetails() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                                 {activeFolder.children.filter((c: any) => c.id !== 'cat-libro-subcontrata').map((child: any) => (
-                                                        <StandaloneCategoryDropzone
-                                                            key={child.id}
-                                                            obraId={id!}
-                                                            category={child}
-                                                            onFilesChanged={refreshAllFiles}
-                                                        />
+                                                    <StandaloneCategoryDropzone
+                                                        key={child.id}
+                                                        obraId={id!}
+                                                        category={child}
+                                                        onFilesChanged={refreshAllFiles}
+                                                    />
                                                 ))}
                                             </div>
                                             <div>
@@ -1472,7 +1522,7 @@ export default function ProjectDetails() {
                                                     <h4 style={{ margin: 0, fontSize: '1rem' }}>
                                                         Libro de Subcontratación ({libroSubcontratas.length} registros)
                                                     </h4>
-                                                    <Button size="sm" onClick={() => setIsLibroModalOpen(true)}>+ Añadir Fila</Button>
+                                                    <Button size="sm" onClick={(e) => openLibroModal(e.currentTarget as HTMLElement)}>+ Añadir Fila</Button>
                                                 </div>
                                                 {libroSubcontratas.length === 0 ? (
                                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No hay registros en el libro de subcontratación.</p>
@@ -1515,6 +1565,8 @@ export default function ProjectDetails() {
                                         </div>
                                     ) : activeFolder.id === 'fol-visitas-reuniones' ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                                            {renderEventsTable('visita', visitas)}
+                                            {renderEventsTable('reunion', reuniones)}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                                 {activeFolder.children.filter((c: any) => c.id === 'cat-li').map((child: any) => (
                                                     <StandaloneCategoryDropzone
@@ -1525,8 +1577,6 @@ export default function ProjectDetails() {
                                                     />
                                                 ))}
                                             </div>
-                                            {renderEventsTable('visita', visitas, () => setIsEventModalOpen(true))}
-                                            {renderEventsTable('reunion', reuniones, () => setIsEventModalOpen(true))}
                                         </div>
                                     ) : (activeFolder && activeFolder.children && activeFolder.children.every((c: any) => c.type === 'category')) ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1855,7 +1905,7 @@ export default function ProjectDetails() {
                                                         <h4 style={{ margin: 0, fontSize: '1rem' }}>
                                                             Libro de Subcontratación ({libroSubcontratas.length} registros)
                                                         </h4>
-                                                        <Button size="sm" onClick={() => setIsLibroModalOpen(true)}>+ Añadir Fila</Button>
+                                                        <Button size="sm" onClick={(e) => openLibroModal(e.currentTarget as HTMLElement)}>+ Añadir Fila</Button>
                                                     </div>
                                                     {libroSubcontratas.length === 0 ? (
                                                         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>No hay registros en el libro de subcontratación.</p>
@@ -1978,13 +2028,11 @@ export default function ProjectDetails() {
                                                                 <h4 style={{ margin: 0, fontSize: '1rem' }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? `Reuniones (${reuniones.length})` : `Visitas (${visitas.length})`}
                                                                 </h4>
-                                                                <Button onClick={() => {
-                                                                    setEventTypeToCreate(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
-                                                                    setEditingContactId(null);
-                                                                    setActiveEvent(null);
-                                                                    setEventModalInitialData(null);
-                                                                    setDuplicateSourceEvent(null);
-                                                                    setIsEventModalOpen(true);
+                                                                <Button onClick={(e) => {
+                                                                    openCreateEventModal(
+                                                                        activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita',
+                                                                        e.currentTarget
+                                                                    );
                                                                 }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? '+ Nueva Reunión' : '+ Nueva Visita'}
                                                                 </Button>
@@ -2027,31 +2075,33 @@ export default function ProjectDetails() {
                                                                                     <td style={{ textTransform: 'capitalize' }}>{row.frecuencia}</td>
                                                                                     <td>{formatAgentName(getEventCoordinatorId(row), 'persona')}</td>
                                                                                     <td style={{ textAlign: 'center' }}>
-                                                                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                                                                        <div className="events-actions-group" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                                                                                             {hasGeneratedActa(row) && (
                                                                                                 <button onClick={async (e) => {
                                                                                                     e.stopPropagation();
                                                                                                     await handleOpenActaPreview(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita', row);
-                                                                                                }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
+                                                                                                }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Acta">
                                                                                                     <FileText size={18} />
                                                                                                 </button>
                                                                                             )}
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
-                                                                                                setActiveReportType(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
-                                                                                                setActiveEvent(null);
-                                                                                                setEventTypeToCreate(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita');
-                                                                                                setEditingContactId(row.id);
-                                                                                                setEventModalInitialData(row);
-                                                                                                setDuplicateSourceEvent(null);
-                                                                                                setIsEventModalOpen(true);
-                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
+                                                                                                openEditEventModal(
+                                                                                                    activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita',
+                                                                                                    row,
+                                                                                                    e.currentTarget as HTMLElement
+                                                                                                );
+                                                                                            }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar Metadatos">
                                                                                                 <Edit2 size={18} />
                                                                                             </button>
                                                                                             <button onClick={(e) => {
                                                                                                 e.stopPropagation();
-                                                                                                openDuplicateEventModal(activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita', row);
-                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
+                                                                                                openDuplicateEventModal(
+                                                                                                    activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita',
+                                                                                                    row,
+                                                                                                    e.currentTarget as HTMLElement
+                                                                                                );
+                                                                                            }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: '#0284c7' }} title="Duplicar">
                                                                                                 <Copy size={18} />
                                                                                             </button>
                                                                                             <button onClick={async (e) => {
@@ -2064,7 +2114,7 @@ export default function ProjectDetails() {
                                                                                                         setVisitas(await getEventos(id!, 'visita'));
                                                                                                     }
                                                                                                 }
-                                                                                            }} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
+                                                                                            }} className="btn btn-ghost event-action-btn" style={{ padding: '0.4rem', color: '#ef4444' }} title="Eliminar">
                                                                                                 <Trash2 size={18} />
                                                                                             </button>
                                                                                         </div>
@@ -2118,6 +2168,7 @@ export default function ProjectDetails() {
                         setEditingContactId(null);
                         setEventModalInitialData(null);
                         setDuplicateSourceEvent(null);
+                        setEventModalAnchorTop(null);
                     }}
                     onSave={async (data) => {
                         try {
@@ -2143,6 +2194,7 @@ export default function ProjectDetails() {
                     assignedContacts={assignedContacts}
                     formatAgentName={formatAgentName}
                     initialData={eventModalInitialData}
+                    mobileAnchorTop={eventModalAnchorTop}
                 />
 
                 {/* Contactos Modals */}
@@ -2178,7 +2230,8 @@ export default function ProjectDetails() {
 
             <LibroSubcontrataModal
                 isOpen={isLibroModalOpen}
-                onClose={() => setIsLibroModalOpen(false)}
+                onClose={closeLibroModal}
+                mobileAnchorTop={libroModalAnchorTop}
                 empresas={allEmpresas}
                 libroActual={libroSubcontratas}
                 defaultContratistaIds={Array.isArray(obra?.contratistaId) ? obra.contratistaId : (obra?.contratistaId ? [obra.contratistaId] : [])}
@@ -2194,14 +2247,14 @@ export default function ProjectDetails() {
                         await updateLibroEntry(created.id, { comitente_id: created.id });
                     }
                     setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id!)));
-                    setIsLibroModalOpen(false);
+                    closeLibroModal();
                 }}
             />
 
             {/* Notas Internas Modal */}
             {
                 isNotesModalOpen && (
-                    <div style={{
+                    <div className="app-modal-overlay" style={{
                         position: 'fixed',
                         top: 0, left: 0, right: 0, bottom: 0,
                         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -2252,7 +2305,7 @@ export default function ProjectDetails() {
             }
 
             {isQuickUploadModalOpen && (
-                <div style={{
+                <div className="app-modal-overlay" style={{
                     position: 'fixed',
                     top: 0,
                     left: 0,

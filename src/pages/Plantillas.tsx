@@ -96,7 +96,7 @@ export default function Plantillas() {
                 </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
+            <div className="plantillas-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
                 {/* Categorías Sidebar */}
                 <Card style={{ height: 'fit-content' }}>
                     <CardHeader>
@@ -171,7 +171,7 @@ export default function Plantillas() {
                             {/* Header de la categoría */}
                             <Card>
                                 <CardBody>
-                                    <div style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', borderLeft: '4px solid var(--color-primary)', border: '1px solid #e2e8f0' }}>
+                                    <div className="plantillas-category-header" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', borderLeft: '4px solid var(--color-primary)', border: '1px solid #e2e8f0' }}>
                                         <div>
                                             <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--color-primary-dark)', fontWeight: 700 }}>{selectedCategory.name}</h2>
                                             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>

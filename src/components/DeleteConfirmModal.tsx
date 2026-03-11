@@ -14,7 +14,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onDelete, onUnassign, item
     if (!isOpen) return null;
 
     return (
-        <div style={{
+        <div className="app-modal-overlay" style={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
             padding: '1rem'

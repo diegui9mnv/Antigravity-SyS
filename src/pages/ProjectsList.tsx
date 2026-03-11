@@ -96,7 +96,7 @@ export default function ProjectsList() {
                     <h1>Gestión de Obras</h1>
                     <p style={{ color: 'var(--text-muted)' }}>Administra tus proyectos y su documentación técnica.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div className="projects-list-actions" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <Button variant="outline" onClick={() => navigate('/obras/localizacion')}>
                         <MapPinned size={18} />
                         Localización de Obras

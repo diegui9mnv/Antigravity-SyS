@@ -16,7 +16,7 @@ export function EmpresaModal({ initialData, onClose, onSave }: any) {
     };
 
     return (
-        <div className="modal-overlay" style={{
+        <div className="modal-overlay app-modal-overlay" style={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
             padding: '1rem'
@@ -70,7 +70,7 @@ export function PersonaModal({ initialData, empresas, onClose, onSave }: any) {
     };
 
     return (
-        <div className="modal-overlay" style={{
+        <div className="modal-overlay app-modal-overlay" style={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60,
             padding: '1rem'

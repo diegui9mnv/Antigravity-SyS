@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardHeader, CardBody, Button } from './ui';
 import { X } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface LibroSubcontrataModalProps {
     empresas: any[];
     libroActual: any[];
     defaultContratistaIds?: string[];
+    mobileAnchorTop?: number | null;
 }
 
 export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
@@ -17,7 +18,8 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
     onSave,
     empresas,
     libroActual,
-    defaultContratistaIds = []
+    defaultContratistaIds = [],
+    mobileAnchorTop = null
 }) => {
     const [formData, setFormData] = useState<any>({
         contratistaId: defaultContratistaIds[0] || '',
@@ -59,7 +61,17 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
         [empresas, formData.contratistaId]
     );
 
+    const cardRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!isOpen) return;
+        if (typeof mobileAnchorTop !== 'number') return;
+        setTimeout(() => {
+            cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+    }, [isOpen, mobileAnchorTop]);
+
     if (!isOpen) return null;
+    const hasAnchorTop = typeof mobileAnchorTop === 'number';
 
     const handleSave = () => {
         if (!formData.contratistaId || !formData.subcontrataId) {
@@ -83,17 +95,19 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
     };
 
     return (
-        <div style={{
+        <div className="app-modal-overlay" style={{
             position: 'fixed',
             inset: 0,
             backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: hasAnchorTop ? 'flex-start' : 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '1rem'
+            padding: '1rem',
+            overflowY: 'auto'
         }}>
-            <Card style={{ width: '100%', maxWidth: '700px', backgroundColor: 'white' }}>
+            <div ref={cardRef} style={{ width: '100%', maxWidth: '700px', marginTop: hasAnchorTop ? `${Math.max(0, mobileAnchorTop + 36)}px` : undefined }}>
+                <Card style={{ width: '100%', maxWidth: '700px', backgroundColor: 'white', maxHeight: '90vh', overflowY: 'auto' }}>
                 <CardHeader className="flex justify-between items-center">
                     <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--color-primary-dark)' }}>Añadir Registro al Libro</h3>
                     <button onClick={onClose} className="btn-icon" title="Cerrar">
@@ -142,7 +156,8 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
                         <Button onClick={handleSave}>Añadir Registro</Button>
                     </div>
                 </CardBody>
-            </Card>
+                </Card>
+            </div>
         </div>
     );
 };
