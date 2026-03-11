@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardHeader, CardBody, CardFooter, Button } from './ui';
 import { X } from 'lucide-react';
 
@@ -78,7 +79,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
         setTitle(resolveTitle());
     };
 
-    return (
+    const modalContent = (
         <div className="app-modal-overlay event-entry-overlay" style={overlayStyle}>
             <div ref={cardRef} style={{ marginTop: hasAnchorTop ? Math.max(0, mobileAnchorTop + 40) + 'px' : undefined, width: '100%', maxWidth: '500px' }}>
                 <Card className="event-modal-card" style={{ maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--color-background)', marginBottom: '40px' }}>
@@ -189,4 +190,7 @@ export const EventModal: React.FC<EventModalProps> = ({ isOpen, tipo, obra, assi
             </div>
         </div >
     );
+
+    if (typeof document === 'undefined') return modalContent;
+    return createPortal(modalContent, document.body);
 };

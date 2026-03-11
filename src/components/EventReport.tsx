@@ -1,6 +1,7 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardHeader, CardBody, Button } from './ui';
-import { ArrowLeft, Save, UploadCloud, Trash2, Camera, PenTool, Plus, FileText, Loader2, ExternalLink, Mail, Send } from 'lucide-react';
+import { ArrowLeft, Save, UploadCloud, Trash2, LocateFixed, PenTool, Plus, FileText, Loader2, ExternalLink, Mail, Send } from 'lucide-react';
 import { getLibroSubcontratas } from '../store';
 import { useDropzone } from 'react-dropzone';
 import { createActaPdfBlob, createActaPdfUrl } from '../lib/actaPdf';
@@ -544,6 +545,44 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
         }));
     };
 
+    const formatAdjuntoSize = (value: any) => {
+        const bytes = Number(value);
+        if (!Number.isFinite(bytes) || bytes <= 0) return '-';
+        return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+    };
+
+    const openAdjunto = (adjunto: any) => {
+        const directUrl = [adjunto?.dataUrl, adjunto?.url, adjunto?.href, adjunto?.publicUrl]
+            .find((value: any) => typeof value === 'string' && value.length > 0);
+
+        if (directUrl) {
+            const opened = window.open(directUrl, '_blank', 'noopener,noreferrer');
+            if (!opened) {
+                const fallbackLink = document.createElement('a');
+                fallbackLink.href = directUrl;
+                fallbackLink.target = '_blank';
+                fallbackLink.rel = 'noopener noreferrer';
+                fallbackLink.download = adjunto?.name || 'adjunto';
+                document.body.appendChild(fallbackLink);
+                fallbackLink.click();
+                document.body.removeChild(fallbackLink);
+            }
+            return;
+        }
+
+        const contentBase64 = typeof adjunto?.contentBase64 === 'string' ? adjunto.contentBase64.trim() : '';
+        if (contentBase64) {
+            const mime = String(adjunto?.type || adjunto?.contentType || 'application/octet-stream');
+            const dataUrl = contentBase64.startsWith('data:')
+                ? contentBase64
+                : `data:${mime};base64,${contentBase64}`;
+            window.open(dataUrl, '_blank', 'noopener,noreferrer');
+            return;
+        }
+
+        alert('No se pudo abrir el archivo adjunto.');
+    };
+
     const handleSave = async () => {
         try {
             await Promise.resolve(onSave(eventData.id || eventData.fallbackId, formData));
@@ -753,7 +792,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                                 <label className="input-label">Coordenadas GPS</label>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                     <input type="text" value={formData.coordenadas} onChange={e => handleChange('coordenadas', e.target.value)} className="input-field" placeholder="Latitud, Longitud" />
-                                                    <Button variant="outline" onClick={handleGetLocation} title="Obtener ubicación actual" style={{ padding: '0.5rem' }}><Camera size={16} /></Button>
+                                                    <Button variant="outline" onClick={handleGetLocation} title="Obtener ubicación actual" style={{ padding: '0.5rem' }}><LocateFixed size={16} /></Button>
                                                 </div>
                                             </div>
                                             <div className="input-group">
@@ -908,6 +947,19 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                 <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Reporte Fotográfico</h3>
                             </CardHeader>
                             <CardBody>
+                                <p
+                                    style={{
+                                        margin: '0 0 0.75rem 0',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--text-muted)',
+                                        backgroundColor: 'var(--color-surface)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: '6px',
+                                        padding: '0.5rem 0.65rem'
+                                    }}
+                                >
+                                    Las imagenes del reporte fotografico apareceran en el acta generada. Para cambiar su orden en el acta, arrastra y suelta cada imagen.
+                                </p>
                                 <div
                                     {...getRootPropsFotos()}
                                     style={{
@@ -1018,6 +1070,19 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                 )}
                             </CardHeader>
                             <CardBody>
+                                <p
+                                    style={{
+                                        margin: '0 0 0.75rem 0',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--text-muted)',
+                                        backgroundColor: 'var(--color-surface)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: '6px',
+                                        padding: '0.5rem 0.65rem'
+                                    }}
+                                >
+                                    Las firmas de asistentes apareceran en el acta generada.
+                                </p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     {showSignaturePad && (
                                         <div style={{ border: '1px solid var(--color-primary)', borderRadius: '8px', padding: '1rem', backgroundColor: 'var(--color-surface)' }}>
@@ -1116,19 +1181,63 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                 {visibleAdjuntos.length > 0 && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                         {visibleAdjuntos.map((file: any) => (
-                                            <div key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', backgroundColor: 'var(--color-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+                                            <div
+                                                key={file.id}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openAdjunto(file)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        openAdjunto(file);
+                                                    }
+                                                }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.75rem',
+                                                    backgroundColor: 'var(--color-surface)',
+                                                    border: '1px solid var(--border-color)',
+                                                    borderRadius: 'var(--radius-md)',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden' }}>
                                                     <div style={{ padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
                                                         <UploadCloud size={16} style={{ color: 'var(--text-muted)' }} />
                                                     </div>
                                                     <div style={{ overflow: 'hidden' }}>
                                                         <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>{file.name}</p>
-                                                        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                            {formatAdjuntoSize(file.size)} | Pulsa para abrir
+                                                        </p>
                                                     </div>
                                                 </div>
-                                                <button onClick={() => handleRemoveAdjunto(file.id)} className="btn-icon text-red-500 hover:bg-red-50" title="Eliminar archivo">
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openAdjunto(file);
+                                                        }}
+                                                        className="btn-icon"
+                                                        title="Abrir archivo"
+                                                    >
+                                                        <ExternalLink size={16} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveAdjunto(file.id);
+                                                        }}
+                                                        className="btn-icon text-red-500 hover:bg-red-50"
+                                                        title="Eliminar archivo"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1139,9 +1248,9 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                     </div>
                 </div>
             </div>
-            {isEmailModalOpen && (
+            {isEmailModalOpen && typeof document !== 'undefined' && createPortal(
                 <div
-                    className="app-modal-overlay report-email-overlay"
+                    className="app-modal-overlay email-modal-overlay"
                     style={{
                         position: 'fixed',
                         inset: 0,
@@ -1153,8 +1262,19 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                         padding: '1rem',
                     }}
                 >
-                    <Card style={{ width: '100%', maxWidth: '760px', maxHeight: '90vh', overflow: 'hidden', backgroundColor: 'white' }}>
-                        <CardHeader style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <Card
+                        style={{
+                            width: '100%',
+                            maxWidth: '760px',
+                            height: 'min(760px, calc(100vh - 2rem))',
+                            maxHeight: 'calc(100vh - 2rem)',
+                            overflow: 'hidden',
+                            backgroundColor: 'white',
+                            display: 'flex',
+                            flexDirection: 'column',
+                        }}
+                    >
+                        <CardHeader style={{ borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
                                 <div>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Enviar notificacion por correo</h3>
@@ -1163,11 +1283,11 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                     </p>
                                 </div>
                                 <button onClick={() => setIsEmailModalOpen(false)} className="btn-icon" title="Cerrar">
-                                    ×
+                                    X
                                 </button>
                             </div>
                         </CardHeader>
-                        <CardBody style={{ maxHeight: 'calc(90vh - 180px)', overflowY: 'auto', paddingTop: '1rem' }}>
+                        <CardBody style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingTop: '1rem' }}>
                             {recipientOptions.length === 0 ? (
                                 <p style={{ margin: 0, color: 'var(--text-muted)' }}>
                                     No hay agentes asignados a esta obra para enviar la notificacion.
@@ -1255,6 +1375,8 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                                 gap: '0.75rem',
                                 borderTop: '1px solid var(--border-color)',
                                 padding: '0.85rem 1.25rem',
+                                flexShrink: 0,
+                                backgroundColor: 'white',
                             }}
                         >
                             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
@@ -1275,7 +1397,8 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                             </div>
                         </div>
                     </Card>
-                </div>
+                </div>,
+                document.body
             )}
         </div >
     );

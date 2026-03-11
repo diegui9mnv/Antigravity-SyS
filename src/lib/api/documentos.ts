@@ -144,6 +144,19 @@ export const deleteDocumento = async (id: string, filePath: string | null): Prom
 };
 
 // Utilidad para obtener la URL pública de un archivo
+export const downloadDocumentoBlob = async (filePath: string): Promise<Blob> => {
+    const { data, error } = await supabase.storage
+        .from('documentos')
+        .download(filePath);
+
+    if (error || !data) {
+        console.error(`Error downloading physical file ${filePath}:`, error);
+        throw error || new Error('No se pudo descargar el archivo.');
+    }
+
+    return data;
+};
+
 export const getDocumentoUrl = (filePath: string): string => {
     const { data } = supabase.storage
         .from('documentos')

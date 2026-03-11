@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardHeader, CardBody, Button } from './ui';
 import { X } from 'lucide-react';
 
@@ -94,7 +95,7 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
         });
     };
 
-    return (
+    const modalContent = (
         <div className="app-modal-overlay" style={{
             position: 'fixed',
             inset: 0,
@@ -160,4 +161,7 @@ export const LibroSubcontrataModal: React.FC<LibroSubcontrataModalProps> = ({
             </div>
         </div>
     );
+
+    if (typeof document === 'undefined') return modalContent;
+    return createPortal(modalContent, document.body);
 };

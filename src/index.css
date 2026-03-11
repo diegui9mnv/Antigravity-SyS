@@ -472,6 +472,16 @@ a:hover {
   overscroll-behavior: contain;
 }
 
+.email-modal-overlay {
+  overflow-y: hidden;
+}
+
+.email-modal-overlay .card-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Responsive Grid Adjustments */
 @media (max-width: 768px) {
   .project-details-grid {
@@ -483,6 +493,7 @@ a:hover {
 
   .project-details-grid>* {
     min-height: 0;
+    min-width: 0;
   }
 }
 
@@ -493,10 +504,117 @@ a:hover {
   height: 100%;
 }
 
+.contactos-split-view > * {
+  min-width: 0;
+}
+
+.contactos-split-view .card-body,
+.contactos-split-view details,
+.contactos-split-view .input-field,
+.contactos-split-view .btn {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.project-title {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.project-typology {
+  overflow-wrap: anywhere;
+}
+
+.project-agent-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-row {
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.contact-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-action-group {
+  flex: 0 0 auto;
+}
+
+.contact-action-btn {
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+.event-table-header {
+  width: 100%;
+  min-width: 0;
+  gap: 0.6rem;
+  overflow: hidden;
+}
+
+.event-table-title {
+  min-width: 0;
+}
+
+.event-create-btn {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
 @media (max-width: 1024px) {
   .contactos-split-view {
     grid-template-columns: 1fr;
     height: auto;
+    gap: 1rem;
+  }
+
+  .contact-action-group {
+    opacity: 1 !important;
+  }
+
+  .contact-action-btn {
+    min-width: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0.48rem !important;
+  }
+
+  .contact-action-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .event-table-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .event-table-title {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .event-create-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    justify-content: center;
+    white-space: normal;
+    padding: 0.5rem 0.7rem !important;
+    font-size: 0.82rem !important;
   }
 
   .event-report-grid {
@@ -642,23 +760,89 @@ a:hover {
   }
 
   .project-summary {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.6rem;
     padding: 0.85rem !important;
+    overflow: hidden;
+  }
+
+  .project-summary > div {
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   .project-summary-header {
     flex-direction: column;
     align-items: flex-start !important;
     gap: 0.6rem;
+    width: 100%;
+    min-width: 0;
   }
 
   .project-status-actions {
     flex-wrap: wrap;
     gap: 0.45rem;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .project-status-actions > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .project-title {
+    width: 100%;
+    font-size: 1.12rem !important;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+
+  .project-typology {
+    display: block;
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .project-summary-meta {
+    display: flex;
     flex-wrap: wrap;
     gap: 0.5rem !important;
+    min-width: 0;
+  }
+
+  .project-summary-meta > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .project-agents-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .project-agent-badge {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    display: block;
+    font-size: 0.72rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
   .agenda-tabs {
@@ -803,8 +987,9 @@ a:hover {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
   }
 
-  .report-email-overlay {
-    padding-top: clamp(4.5rem, 16vh, 7.5rem) !important;
+  .email-modal-overlay {
+    align-items: center !important;
+    overflow-y: hidden !important;
   }
 }
 

@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save, RotateCw, Copy } from 'lucide-react';
 import { updateObra as updateObraLocal, fileStructureTemplate } from '../store';
-import { getDocumentos, getTodosDocumentos, uploadDocumento, updateDocumentoMetadata, deleteDocumento, getDocumentoUrl, type DocumentoMetaData } from '../lib/api/documentos';
+import { getDocumentos, getTodosDocumentos, uploadDocumento, updateDocumentoMetadata, deleteDocumento, downloadDocumentoBlob, getDocumentoUrl, type DocumentoMetaData } from '../lib/api/documentos';
 import { getEventos, createEvento, updateEvento, deleteEvento, type ObraEvento } from '../lib/api/eventos';
 import { getLibroSubcontratas as getLibroSubcontratasDB, createLibroEntry, updateLibroEntry, deleteLibroEntry, type LibroSubcontrataEntry } from '../lib/api/subcontratas';
 import { getObraWithRelations, updateObraAgentes, updateObraFields } from '../lib/api/obras';
@@ -534,12 +535,22 @@ export default function ProjectDetails() {
     // Contactos View State
     const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
+    const [contactModalAnchorTop, setContactModalAnchorTop] = useState<number | null>(null);
     const [isLibroModalOpen, setIsLibroModalOpen] = useState(false);
     const [libroModalAnchorTop, setLibroModalAnchorTop] = useState<number | null>(null);
     const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
     const [isQuickUploadModalOpen, setIsQuickUploadModalOpen] = useState(false);
     const [quickUploadCategoryId, setQuickUploadCategoryId] = useState('');
     const [isQuickUploading, setIsQuickUploading] = useState(false);
+    const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+    const [isLoadingEventos, setIsLoadingEventos] = useState(false);
+    const [zipProgress, setZipProgress] = useState<{
+        total: number;
+        processed: number;
+        added: number;
+        failed: number;
+        currentFile: string;
+    } | null>(null);
     const [isStatusUpdating, setIsStatusUpdating] = useState(false);
     const [internalNotes, setInternalNotes] = useState('');
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
@@ -571,6 +582,7 @@ export default function ProjectDetails() {
         isCoreRole: false
     });
     const libroModalRestoreScrollRef = useRef<number | null>(null);
+    const contactModalRestoreScrollRef = useRef<number | null>(null);
 
     const quickUploadCategories = useMemo(
         () => collectCategoryOptions(fileStructureTemplate),
@@ -662,8 +674,7 @@ export default function ProjectDetails() {
             } else {
                 await createEmpresaAPI(data);
             }
-            setEditingContactId(null);
-            setIsEmpresaModalOpen(false);
+            closeEmpresaModal();
             await loadObraData();
         } catch (error) {
             console.error('Error saving empresa:', error);
@@ -689,8 +700,7 @@ export default function ProjectDetails() {
                     empresa_id: payload.empresa_id
                 });
             }
-            setEditingContactId(null);
-            setIsPersonaModalOpen(false);
+            closePersonaModal();
             await loadObraData();
         } catch (error) {
             console.error('Error saving persona:', error);
@@ -719,7 +729,7 @@ export default function ProjectDetails() {
                 await persistAssignedContacts(updated);
             }
 
-            setDeleteModalState({ ...deleteModalState, isOpen: false });
+            closeDeleteContactModal();
             await loadObraData();
         } catch (error) {
             console.error('Error deleting contact:', error);
@@ -741,7 +751,7 @@ export default function ProjectDetails() {
             await persistAssignedContacts(updated);
         }
 
-        setDeleteModalState({ ...deleteModalState, isOpen: false });
+        closeDeleteContactModal();
         await loadObraData();
     };
 
@@ -766,14 +776,24 @@ export default function ProjectDetails() {
             ordenComitente: row.orden_comitente ?? row.ordenComitente,
         }));
 
+    const fetchEventosForObra = (obraId: string) =>
+        Promise.all([
+            getEventos(obraId, 'reunion'),
+            getEventos(obraId, 'visita')
+        ]);
+
     const loadObraData = async () => {
         if (id) {
+            setIsLoadingEventos(true);
             try {
-                const [obRaw, empresasApi, personasApi] = await Promise.all([
+                const [obRaw, empresasApi, personasApi, allFiles, eventosData] = await Promise.all([
                     getObraWithRelations(id),
                     getEmpresasAPI(),
-                    getPersonasAPI()
+                    getPersonasAPI(),
+                    getTodosDocumentos(id),
+                    fetchEventosForObra(id)
                 ]);
+                const [reunionesData, visitasData] = eventosData;
 
                 const ob = normalizeObraForUi(obRaw);
                 setObra(ob);
@@ -791,12 +811,13 @@ export default function ProjectDetails() {
 
                 setAllEmpresas(empresas);
                 setAllPersonas(personas);
-
-                // Fetch all files for counts and global view
-                const allFiles = await getTodosDocumentos(id);
                 setAllObraFiles(allFiles);
+                setReuniones(reunionesData);
+                setVisitas(visitasData);
             } catch (error) {
                 console.error('Error cargando obra:', error);
+            } finally {
+                setIsLoadingEventos(false);
             }
         }
     };
@@ -818,9 +839,9 @@ export default function ProjectDetails() {
                 try {
                     const docs = await getDocumentos(id, activeCategory.id);
                     setFiles(docs);
-                    if (activeCategory.id === 'cat-reuniones') setReuniones(await getEventos(id, 'reunion'));
-                    else if (activeCategory.id === 'cat-visitas') setVisitas(await getEventos(id, 'visita'));
-                    else if (activeCategory.id === 'cat-libro-subcontrata') setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id)));
+                    if (activeCategory.id === 'cat-libro-subcontrata') {
+                        setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id)));
+                    }
                 } catch (e) {
                     console.error('Error fetching category data', e);
                 }
@@ -828,16 +849,24 @@ export default function ProjectDetails() {
                 const activeFolder = folderStack[folderStack.length - 1];
                 setFiles([]);
                 if (activeFolder.id === 'fol-visitas-reuniones') {
-                    setReuniones(await getEventos(id, 'reunion'));
-                    setVisitas(await getEventos(id, 'visita'));
+                    if (!isLoadingEventos && reuniones.length === 0 && visitas.length === 0) {
+                        setIsLoadingEventos(true);
+                        try {
+                            const [reunionesData, visitasData] = await fetchEventosForObra(id);
+                            setReuniones(reunionesData);
+                            setVisitas(visitasData);
+                        } catch (error) {
+                            console.error('Error loading folder events:', error);
+                        } finally {
+                            setIsLoadingEventos(false);
+                        }
+                    }
                 } else if (activeFolder.id === 'fol-contratistas') {
                     setLibroSubcontratas(normalizeLibroRows(await getLibroSubcontratasDB(id)));
                 }
             } else {
                 // Global View
                 setFiles(allObraFiles);
-                setReuniones([]);
-                setVisitas([]);
                 setLibroSubcontratas([]);
             }
         };
@@ -1144,6 +1173,70 @@ export default function ProjectDetails() {
         return Math.max(10, Math.round(triggerRect.top));
     };
 
+    const resolveContactModalAnchorTop = (triggerElement?: HTMLElement | null): number | null => {
+        if (typeof window === 'undefined' || !triggerElement) return null;
+        if (window.innerWidth > 920) return null;
+        const triggerRect = triggerElement.getBoundingClientRect();
+        return Math.max(10, Math.round(triggerRect.top));
+    };
+
+    const prepareContactModalOpen = (triggerElement?: HTMLElement | null) => {
+        if (typeof window !== 'undefined' && window.innerWidth <= 920) {
+            contactModalRestoreScrollRef.current = window.scrollY;
+        } else {
+            contactModalRestoreScrollRef.current = null;
+        }
+        setContactModalAnchorTop(resolveContactModalAnchorTop(triggerElement));
+    };
+
+    const restoreContactScrollOnMobile = () => {
+        const restoreTop = contactModalRestoreScrollRef.current;
+        contactModalRestoreScrollRef.current = null;
+        setContactModalAnchorTop(null);
+        if (typeof window !== 'undefined' && typeof restoreTop === 'number' && window.innerWidth <= 920) {
+            window.setTimeout(() => {
+                window.scrollTo({ top: restoreTop, behavior: 'smooth' });
+            }, 100);
+        }
+    };
+
+    const openPersonaModalForEdit = (contactId: string, triggerElement?: HTMLElement | null) => {
+        prepareContactModalOpen(triggerElement);
+        setEditingContactId(contactId);
+        setIsPersonaModalOpen(true);
+    };
+
+    const openEmpresaModalForEdit = (contactId: string, triggerElement?: HTMLElement | null) => {
+        prepareContactModalOpen(triggerElement);
+        setEditingContactId(contactId);
+        setIsEmpresaModalOpen(true);
+    };
+
+    const openDeleteContactModal = (
+        payload: Omit<typeof deleteModalState, 'isOpen'>,
+        triggerElement?: HTMLElement | null
+    ) => {
+        prepareContactModalOpen(triggerElement);
+        setDeleteModalState({ ...payload, isOpen: true });
+    };
+
+    const closePersonaModal = () => {
+        setIsPersonaModalOpen(false);
+        setEditingContactId(null);
+        restoreContactScrollOnMobile();
+    };
+
+    const closeEmpresaModal = () => {
+        setIsEmpresaModalOpen(false);
+        setEditingContactId(null);
+        restoreContactScrollOnMobile();
+    };
+
+    const closeDeleteContactModal = () => {
+        setDeleteModalState((prev) => ({ ...prev, isOpen: false }));
+        restoreContactScrollOnMobile();
+    };
+
     const openLibroModal = (triggerElement?: HTMLElement | null) => {
         if (typeof window !== 'undefined' && window.innerWidth <= 920) {
             libroModalRestoreScrollRef.current = window.scrollY;
@@ -1202,7 +1295,7 @@ export default function ProjectDetails() {
         const idsArray = Array.isArray(ids) ? ids : [ids];
         if (idsArray.length === 0) return null;
         return idsArray.map((id, index) => (
-            <span key={`${id}-${index}`} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'white' }}>
+            <span key={`${id}-${index}`} className="project-agent-badge" style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'white' }}>
                 {label}: {formatAgentName(id, type)}
             </span>
         ));
@@ -1217,43 +1310,135 @@ export default function ProjectDetails() {
     };
 
     const handleDownloadZip = async () => {
-        const zip = new JSZip();
-        // Since projectGlobalFiles recalculates every render, we can get it:
-        const allFiles = projectGlobalFiles;
+        if (isDownloadingZip) return;
 
+        const allFiles = projectGlobalFiles;
         if (allFiles.length === 0) {
             alert('No hay archivos en la obra para descargar.');
             return;
         }
 
-        allFiles.forEach(f => {
-            const parts = f.path ? f.path.split('/').map((p: string) => p.trim()) : ['Sin Clasificar'];
-            let currentFolder = zip;
-            parts.forEach((p: string) => {
-                currentFolder = currentFolder.folder(p)!;
-            });
-            currentFolder.file(f.name, `Contenido simulado del archivo: ${f.name}\nSubido el: ${f.uploadDate}\nFecha Real: ${f.fechaReal || f.uploadDate}\nEstado: ${f.estado || 'Actual'}`);
-        });
+        const sanitizeSegment = (value: string) =>
+            String(value || '')
+                .replace(/[\\/:*?"<>|]/g, '-')
+                .replace(/\s+/g, ' ')
+                .trim() || 'Sin nombre';
 
-        const content = await zip.generateAsync({ type: 'blob' });
-        saveAs(content, `Documentacion_${obra.codigoObra}.zip`);
+        const splitPath = (rawPath: string | null | undefined): string[] =>
+            String(rawPath || '')
+                .split('/')
+                .map((segment) => sanitizeSegment(segment))
+                .filter(Boolean);
+
+        const withUniqueName = (fullPath: string, counter: Map<string, number>): string => {
+            const previous = counter.get(fullPath) || 0;
+            counter.set(fullPath, previous + 1);
+            if (previous === 0) return fullPath;
+
+            const slashIdx = fullPath.lastIndexOf('/');
+            const folder = slashIdx >= 0 ? fullPath.slice(0, slashIdx) : '';
+            const originalName = slashIdx >= 0 ? fullPath.slice(slashIdx + 1) : fullPath;
+            const dotIdx = originalName.lastIndexOf('.');
+            const base = dotIdx > 0 ? originalName.slice(0, dotIdx) : originalName;
+            const ext = dotIdx > 0 ? originalName.slice(dotIdx) : '';
+            const nextName = `${base} (${previous + 1})${ext}`;
+            return folder ? `${folder}/${nextName}` : nextName;
+        };
+
+        setIsDownloadingZip(true);
+        setZipProgress({
+            total: allFiles.length,
+            processed: 0,
+            added: 0,
+            failed: 0,
+            currentFile: '',
+        });
+        try {
+            const zip = new JSZip();
+            const nameCounter = new Map<string, number>();
+            const failedFiles: string[] = [];
+            const totalFiles = allFiles.length;
+            let processedFiles = 0;
+            let addedFiles = 0;
+            let failedCount = 0;
+
+            const advanceProgress = (currentFile: string, success: boolean) => {
+                processedFiles += 1;
+                if (success) addedFiles += 1;
+                else failedCount += 1;
+
+                setZipProgress({
+                    total: totalFiles,
+                    processed: processedFiles,
+                    added: addedFiles,
+                    failed: failedCount,
+                    currentFile,
+                });
+            };
+
+            for (const file of allFiles) {
+                const fileName = sanitizeSegment(file.file_name || 'archivo');
+                const folderParts = splitPath(file.path);
+                const zipPath = [...folderParts, fileName].join('/');
+                const finalZipPath = withUniqueName(zipPath, nameCounter);
+
+                if (!file.file_path) {
+                    failedFiles.push(file.file_name || finalZipPath);
+                    advanceProgress(fileName, false);
+                    continue;
+                }
+
+                try {
+                    const blob = await downloadDocumentoBlob(file.file_path);
+                    zip.file(finalZipPath, blob);
+                    advanceProgress(fileName, true);
+                } catch (error) {
+                    console.error(`No se pudo descargar ${file.file_path}:`, error);
+                    failedFiles.push(file.file_name || finalZipPath);
+                    advanceProgress(fileName, false);
+                }
+            }
+
+            if (addedFiles === 0) {
+                alert('No se pudo descargar ningun archivo de la obra.');
+                return;
+            }
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const baseName = sanitizeSegment(obra.codigoObra || obra.codigo_obra || obra.denominacion || 'obra');
+            saveAs(content, `Documentacion_${baseName}.zip`);
+
+            if (failedFiles.length > 0) {
+                alert(`Se descargaron ${addedFiles} archivos. No se pudieron incluir ${failedFiles.length}.`);
+            }
+        } catch (error) {
+            console.error('Error generando ZIP real de documentacion:', error);
+            alert('No se pudo generar el ZIP de documentacion.');
+        } finally {
+            setIsDownloadingZip(false);
+            setZipProgress(null);
+        }
     };
 
     const renderEventsTable = (type: 'reunion' | 'visita', events: any[]) => {
 
         return (
             <Card style={{ backgroundColor: 'white', padding: '1.5rem', marginBottom: '1rem', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-                <div className="flex justify-between items-center" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                    <h4 style={{ margin: 0, fontSize: '1rem' }}>
+                <div className="event-table-header flex justify-between items-center" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', overflow: 'hidden' }}>
+                    <h4 className="event-table-title" style={{ margin: 0, fontSize: '1rem', minWidth: 0 }}>
                         {type === 'reunion' ? `Reuniones (${events.length})` : `Visitas (${events.length})`}
                     </h4>
                     <Button onClick={(e) => {
                         openCreateEventModal(type, e.currentTarget);
-                    }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
+                    }} className="event-create-btn" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box', whiteSpace: 'normal', textAlign: 'center' }}>
                         {type === 'reunion' ? '+ Nueva Reunión' : '+ Nueva Visita'}
                     </Button>
                 </div>
-                {events.length === 0 ? (
+                {isLoadingEventos && events.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+                        Cargando {type === 'reunion' ? 'reuniones' : 'visitas'}...
+                    </p>
+                ) : events.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
                         No hay {type === 'reunion' ? 'reuniones' : 'visitas'} registradas.
                     </p>
@@ -1374,16 +1559,29 @@ export default function ProjectDetails() {
                         <Button variant="outline" onClick={openQuickUploadModal} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <UploadCloud size={16} /> Subida rápida
                         </Button>
-                        <Button onClick={handleDownloadZip} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Download size={16} /> Descargar Documentación (ZIP)
+                        <Button onClick={handleDownloadZip} disabled={isDownloadingZip} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Download size={16} /> {isDownloadingZip ? `Preparando ZIP (${zipProgress?.processed ?? 0}/${zipProgress?.total ?? 0})` : 'Descargar Documentación (ZIP)'}
                         </Button>
                     </div>
                 </div>
 
-                <div className="project-summary flex justify-between items-start" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                                {isDownloadingZip && zipProgress && (
+                    <div style={{ marginTop: '-1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                        <span>ZIP: {zipProgress.processed}/{zipProgress.total}</span>
+                        <span>Incluidos: {zipProgress.added}</span>
+                        <span>Omitidos: {zipProgress.failed}</span>
+                        {zipProgress.currentFile && (
+                            <span style={{ maxWidth: '26rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={zipProgress.currentFile}>
+                                Actual: {zipProgress.currentFile}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+<div className="project-summary" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-surface)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
                     <div>
                         <div className="project-summary-header flex items-center gap-4 mb-2">
-                            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', letterSpacing: '-0.025em' }}>{obra.denominacion}</h1>
+                            <h1 className="project-title" style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', letterSpacing: '-0.025em' }}>{obra.denominacion}</h1>
                             <div className="project-status-actions flex items-center gap-2">
                                 <Badge status={badgeStatusForObra(obra.estado)}>{formatObraStatus(obra.estado)}</Badge>
                                 <Button
@@ -1397,7 +1595,7 @@ export default function ProjectDetails() {
                                     <RotateCw size={14} />
                                     {isStatusUpdating ? 'Actualizando...' : `Pasar a ${formatObraStatus(getNextObraStatus(obra.estado))}`}
                                 </Button>
-                                {obra.tipologia && <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 500, marginLeft: '0.25rem' }}>{obra.tipologia}</span>}
+                                {obra.tipologia && <span className="project-typology" style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 500, marginLeft: '0.25rem' }}>{obra.tipologia}</span>}
                             </div>
                         </div>
                         <div className="project-summary-meta flex gap-4" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
@@ -1407,7 +1605,7 @@ export default function ProjectDetails() {
                             {obra.cebe && <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>CEBE: {obra.cebe}</span>}
                         </div>
                         {/* Agents */}
-                        <div className="flex flex-wrap gap-2">
+                        <div className="project-agents-row flex flex-wrap gap-2">
                             {renderAgentsBadges(obra.promotorId, 'Promotor', 'empresa')}
                             {renderAgentsBadges(obra.contratistaId, 'Contratista', 'empresa')}
                             {renderAgentsBadges(obra.directorObraId, 'Dir. Obra', 'persona')}
@@ -1781,7 +1979,7 @@ export default function ProjectDetails() {
                                     ) : (
                                         <>
                                             {activeCategory.id === 'cat-contactos' ? (
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 1fr) minmax(250px, 1fr)', gap: '1.5rem', alignItems: 'start' }}>
+                                                <div className="contactos-split-view" style={{ alignItems: 'start' }}>
                                                     {/* EMPRESAS COL */}
                                                     <Card style={{ backgroundColor: 'var(--color-surface)' }}>
                                                         <div className="card-header flex justify-between items-center" style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
@@ -1800,22 +1998,21 @@ export default function ProjectDetails() {
                                                                     </div>
                                                                     <div className="flex flex-col">
                                                                         {(Array.isArray(group.ids) ? group.ids : [group.ids]).filter(Boolean).map((id: string, index, arr) => (
-                                                                            <div key={id} className="group flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
-                                                                                <span className="text-gray-700 font-medium text-sm">{formatAgentName(id, 'empresa')}</span>
-                                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
-                                                                                    <Button variant="ghost" size="sm" onClick={() => {
+                                                                            <div key={id} className="group contact-row flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
+                                                                                <span className="contact-row-name text-gray-700 font-medium text-sm">{formatAgentName(id, 'empresa')}</span>
+                                                                                <div className="contact-action-group opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={(e) => openEmpresaModalForEdit(id, e.currentTarget as HTMLElement)} className="contact-action-btn text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={(e) => {
                                                                                         const emp = findEmpresaById(id);
-                                                                                        setDeleteModalState({
-                                                                                            isOpen: true,
+                                                                                        openDeleteContactModal({
                                                                                             itemName: emp ? emp.razonSocial : 'Desconocido',
                                                                                             itemType: 'empresa',
                                                                                             roleName: group.title,
                                                                                             id: id,
                                                                                             key: group.key,
                                                                                             isCoreRole: true
-                                                                                        });
-                                                                                    }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                        }, e.currentTarget as HTMLElement);
+                                                                                    }} className="contact-action-btn text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
                                                                                 </div>
                                                                             </div>
                                                                         ))}
@@ -1830,22 +2027,21 @@ export default function ProjectDetails() {
                                                                     <div className="text-xs font-bold text-gray-900 mb-2 pb-1 flex items-center" style={{ fontWeight: 'bold', borderBottom: '2px solid #cbd5e1', gap: '0.5rem' }}>
                                                                         <Building2 size={14} /> {c.role}
                                                                     </div>
-                                                                    <div className="flex items-center justify-between group py-2">
-                                                                        <div className="text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'empresa')}</div>
-                                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                            <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsEmpresaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
-                                                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                                    <div className="contact-row flex items-center justify-between group py-2">
+                                                                        <div className="contact-row-name text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'empresa')}</div>
+                                                                        <div className="contact-action-group flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <Button variant="ghost" size="sm" onClick={(e) => openEmpresaModalForEdit(c.agentId, e.currentTarget as HTMLElement)} className="contact-action-btn text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                            <Button variant="ghost" size="sm" onClick={(e) => {
                                                                                 const emp = findEmpresaById(c.agentId);
-                                                                                setDeleteModalState({
-                                                                                    isOpen: true,
+                                                                                openDeleteContactModal({
                                                                                     itemName: emp ? emp.razonSocial : 'Desconocido',
                                                                                     itemType: 'empresa',
                                                                                     roleName: c.role,
                                                                                     id: c.agentId,
                                                                                     isCoreRole: false,
                                                                                     refId: c.id
-                                                                                });
-                                                                            }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                }, e.currentTarget as HTMLElement);
+                                                                            }} className="contact-action-btn text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1883,22 +2079,21 @@ export default function ProjectDetails() {
                                                                     </div>
                                                                     <div className="flex flex-col">
                                                                         {(Array.isArray(group.ids) ? group.ids : [group.ids]).filter(Boolean).map((id: string, index, arr) => (
-                                                                            <div key={id} className="group flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
-                                                                                <span className="text-gray-700 font-medium text-sm">{formatAgentName(id, 'persona')}</span>
-                                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                                                                    <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(id); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
-                                                                                    <Button variant="ghost" size="sm" onClick={() => {
+                                                                            <div key={id} className="group contact-row flex items-center justify-between py-2" style={index < arr.length - 1 ? { borderBottom: '1px solid #e2e8f0' } : {}}>
+                                                                                <span className="contact-row-name text-gray-700 font-medium text-sm">{formatAgentName(id, 'persona')}</span>
+                                                                                <div className="contact-action-group opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={(e) => openPersonaModalForEdit(id, e.currentTarget as HTMLElement)} className="contact-action-btn text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={(e) => {
                                                                                         const person = findPersonaById(id);
-                                                                                        setDeleteModalState({
-                                                                                            isOpen: true,
+                                                                                        openDeleteContactModal({
                                                                                             itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
                                                                                             itemType: 'persona',
                                                                                             roleName: group.title,
                                                                                             id: id,
                                                                                             key: group.key,
                                                                                             isCoreRole: true
-                                                                                        });
-                                                                                    }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                        }, e.currentTarget as HTMLElement);
+                                                                                    }} className="contact-action-btn text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
                                                                                 </div>
                                                                             </div>
                                                                         ))}
@@ -1918,22 +2113,21 @@ export default function ProjectDetails() {
                                                                                 {c.role} {personData?.tipo && <span className="font-normal text-gray-500 text-[10px] ml-1">({personData.tipo})</span>}
                                                                             </span>
                                                                         </div>
-                                                                        <div className="flex items-center justify-between group py-2">
-                                                                            <div className="text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'persona')}</div>
-                                                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                <Button variant="ghost" size="sm" onClick={() => { setEditingContactId(c.agentId); setIsPersonaModalOpen(true); }} className="text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
-                                                                                <Button variant="ghost" size="sm" onClick={() => {
+                                                                        <div className="contact-row flex items-center justify-between group py-2">
+                                                                            <div className="contact-row-name text-gray-700 font-medium text-sm">{formatAgentName(c.agentId, 'persona')}</div>
+                                                                            <div className="contact-action-group flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                <Button variant="ghost" size="sm" onClick={(e) => openPersonaModalForEdit(c.agentId, e.currentTarget as HTMLElement)} className="contact-action-btn text-blue-500 hover:bg-blue-50" style={{ padding: '6px', height: 'auto' }}><Pencil size={14} /></Button>
+                                                                                <Button variant="ghost" size="sm" onClick={(e) => {
                                                                                     const person = findPersonaById(c.agentId);
-                                                                                    setDeleteModalState({
-                                                                                        isOpen: true,
+                                                                                    openDeleteContactModal({
                                                                                         itemName: person ? `${person.nombre} ${person.apellidos}` : 'Desconocido',
                                                                                         itemType: 'persona',
                                                                                         roleName: c.role,
                                                                                         id: c.agentId,
                                                                                         isCoreRole: false,
                                                                                         refId: c.id
-                                                                                    });
-                                                                                }} className="text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
+                                                                                    }, e.currentTarget as HTMLElement);
+                                                                                }} className="contact-action-btn text-red-500 hover:bg-red-50" style={{ padding: '6px', height: 'auto' }}><Trash2 size={14} /></Button>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -2071,8 +2265,8 @@ export default function ProjectDetails() {
                                                     {/* File List or Event Table depending on category */}
                                                     {activeCategory.id === 'cat-reuniones' || activeCategory.id === 'cat-visitas' ? (
                                                         <div>
-                                                            <div className="flex justify-between items-center" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                                                                <h4 style={{ margin: 0, fontSize: '1rem' }}>
+                                                            <div className="event-table-header flex justify-between items-center" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', overflow: 'hidden' }}>
+                                                                <h4 className="event-table-title" style={{ margin: 0, fontSize: '1rem', minWidth: 0 }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? `Reuniones (${reuniones.length})` : `Visitas (${visitas.length})`}
                                                                 </h4>
                                                                 <Button onClick={(e) => {
@@ -2080,13 +2274,17 @@ export default function ProjectDetails() {
                                                                         activeCategory.id === 'cat-reuniones' ? 'reunion' : 'visita',
                                                                         e.currentTarget
                                                                     );
-                                                                }} style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}>
+                                                                }} className="event-create-btn" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box', whiteSpace: 'normal', textAlign: 'center' }}>
                                                                     {activeCategory.id === 'cat-reuniones' ? '+ Nueva Reunión' : '+ Nueva Visita'}
                                                                 </Button>
                                                             </div>
 
                                                             {/* TABLE RENDERER FOR MEETINGS/VISITS */}
-                                                            {(activeCategory.id === 'cat-reuniones' && reuniones.length === 0) || (activeCategory.id === 'cat-visitas' && visitas.length === 0) ? (
+                                                            {isLoadingEventos && ((activeCategory.id === 'cat-reuniones' && reuniones.length === 0) || (activeCategory.id === 'cat-visitas' && visitas.length === 0)) ? (
+                                                                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+                                                                    Cargando {activeCategory.id === 'cat-reuniones' ? 'reuniones' : 'visitas'}...
+                                                                </p>
+                                                            ) : ((activeCategory.id === 'cat-reuniones' && reuniones.length === 0) || (activeCategory.id === 'cat-visitas' && visitas.length === 0)) ? (
                                                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
                                                                     No hay {activeCategory.id === 'cat-reuniones' ? 'reuniones' : 'visitas'} registradas.
                                                                 </p>
@@ -2252,8 +2450,9 @@ export default function ProjectDetails() {
                 <PersonaModal
                     initialData={editingContactId ? findPersonaById(editingContactId) : null}
                     empresas={allEmpresas}
-                    onClose={() => { setIsPersonaModalOpen(false); setEditingContactId(null); }}
+                    onClose={closePersonaModal}
                     onSave={handleSavePersona}
+                    mobileAnchorTop={contactModalAnchorTop}
                 />
             )
             }
@@ -2261,19 +2460,21 @@ export default function ProjectDetails() {
                 isEmpresaModalOpen && (
                     <EmpresaModal
                         initialData={editingContactId ? findEmpresaById(editingContactId) : null}
-                        onClose={() => { setIsEmpresaModalOpen(false); setEditingContactId(null); }}
+                        onClose={closeEmpresaModal}
                         onSave={handleSaveEmpresa}
+                        mobileAnchorTop={contactModalAnchorTop}
                     />
                 )
             }
 
             <DeleteConfirmModal
                 isOpen={deleteModalState.isOpen}
-                onClose={() => setDeleteModalState({ ...deleteModalState, isOpen: false })}
+                onClose={closeDeleteContactModal}
                 onDelete={executeDelete}
                 onUnassign={executeUnassign}
                 itemName={deleteModalState.itemName}
                 roleName={deleteModalState.roleName}
+                mobileAnchorTop={contactModalAnchorTop}
             />
 
             <LibroSubcontrataModal
@@ -2300,8 +2501,7 @@ export default function ProjectDetails() {
             />
 
             {/* Notas Internas Modal */}
-            {
-                isNotesModalOpen && (
+            {isNotesModalOpen && typeof document !== 'undefined' && createPortal(
                     <div className="app-modal-overlay" style={{
                         position: 'fixed',
                         top: 0, left: 0, right: 0, bottom: 0,
@@ -2348,11 +2548,11 @@ export default function ProjectDetails() {
                                 </Button>
                             </div>
                         </Card>
-                    </div>
-                )
-            }
+                    </div>,
+                    document.body
+                )}
 
-            {isQuickUploadModalOpen && (
+            {isQuickUploadModalOpen && typeof document !== 'undefined' && createPortal(
                 <div className="app-modal-overlay" style={{
                     position: 'fixed',
                     top: 0,
@@ -2422,11 +2622,14 @@ export default function ProjectDetails() {
                             </Button>
                         </div>
                     </Card>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
 }
+
+
 
 
 

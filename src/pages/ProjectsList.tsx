@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, FileSpreadsheet, MapPinned, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Edit2, FileSpreadsheet, MapPinned, Plus, Search, Trash2, X } from 'lucide-react';
 import { deleteObra, getObras, type Obra } from '../lib/api/obras';
 import { getEmpresas, getPersonas, type Empresa, type Persona } from '../lib/api/agenda';
 import { Badge, Button, MultiSelect } from '../components/ui';
@@ -41,6 +41,14 @@ type ProjectFilters = {
     coordinadorSysIds: string[];
 };
 
+type DeleteObraModalState = {
+    isOpen: boolean;
+    obraId: string;
+    denominacion: string;
+};
+
+const SUCCESS_TOAST_MS = 3200;
+
 export default function ProjectsList() {
     const navigate = useNavigate();
     const [obras, setObras] = useState<Obra[]>([]);
@@ -48,6 +56,14 @@ export default function ProjectsList() {
     const [personas, setPersonas] = useState<Persona[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingObra, setEditingObra] = useState<Obra | null>(null);
+    const [isDeletingObra, setIsDeletingObra] = useState(false);
+    const [deleteObraModal, setDeleteObraModal] = useState<DeleteObraModalState>({
+        isOpen: false,
+        obraId: '',
+        denominacion: '',
+    });
+    const [successToastMessage, setSuccessToastMessage] = useState('');
+    const successToastTimerRef = useRef<number | null>(null);
 
     const [filters, setFilters] = useState<ProjectFilters>({
         denominacion: '',
@@ -62,6 +78,14 @@ export default function ProjectsList() {
     useEffect(() => {
         loadObras();
         loadAgenda();
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (successToastTimerRef.current !== null) {
+                window.clearTimeout(successToastTimerRef.current);
+            }
+        };
     }, []);
 
     const loadObras = async () => {
@@ -90,15 +114,61 @@ export default function ProjectsList() {
         setEditingObra(null);
     };
 
-    const handleDelete = async (e: React.MouseEvent, id: string, denominacion: string) => {
+    const openDeleteObraModal = (e: React.MouseEvent, id: string, denominacion: string) => {
         e.stopPropagation();
-        if (window.confirm(`¿Estás seguro de querer eliminar la obra "${denominacion}"? Esto no se puede deshacer.`)) {
-            try {
-                await deleteObra(id);
-                loadObras();
-            } catch {
-                alert('Error al eliminar obra');
-            }
+        setDeleteObraModal({
+            isOpen: true,
+            obraId: id,
+            denominacion,
+        });
+    };
+
+    const closeDeleteObraModal = () => {
+        if (isDeletingObra) return;
+        setDeleteObraModal({
+            isOpen: false,
+            obraId: '',
+            denominacion: '',
+        });
+    };
+
+    const closeSuccessToast = () => {
+        setSuccessToastMessage('');
+        if (successToastTimerRef.current !== null) {
+            window.clearTimeout(successToastTimerRef.current);
+            successToastTimerRef.current = null;
+        }
+    };
+
+    const showSuccessToast = (message: string) => {
+        setSuccessToastMessage(message);
+        if (successToastTimerRef.current !== null) {
+            window.clearTimeout(successToastTimerRef.current);
+        }
+        successToastTimerRef.current = window.setTimeout(() => {
+            setSuccessToastMessage('');
+            successToastTimerRef.current = null;
+        }, SUCCESS_TOAST_MS);
+    };
+
+    const confirmDeleteObra = async () => {
+        if (!deleteObraModal.obraId || isDeletingObra) return;
+        setIsDeletingObra(true);
+        try {
+            await deleteObra(deleteObraModal.obraId);
+            setDeleteObraModal({
+                isOpen: false,
+                obraId: '',
+                denominacion: '',
+            });
+            await loadObras();
+            showSuccessToast('Obra eliminada correctamente.');
+        } catch (error: any) {
+            console.error('Error deleting obra:', error);
+            const detail = error?.message ? ` Detalle: ${error.message}` : '';
+            alert(`No se pudo eliminar la obra.${detail}`);
+        } finally {
+            setIsDeletingObra(false);
         }
     };
 
@@ -248,7 +318,7 @@ export default function ProjectsList() {
                                             <button onClick={(e) => openEditModal(e, obra)} className="btn btn-ghost project-list-action-btn" style={{ color: 'var(--text-main)' }} title="Editar">
                                                 <Edit2 size={18} />
                                             </button>
-                                            <button onClick={(e) => handleDelete(e, obra.id, obra.denominacion)} className="btn btn-ghost project-list-action-btn" style={{ color: '#ef4444' }} title="Borrar">
+                                            <button onClick={(e) => openDeleteObraModal(e, obra.id, obra.denominacion)} className="btn btn-ghost project-list-action-btn" style={{ color: '#ef4444' }} title="Borrar">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>
@@ -266,6 +336,121 @@ export default function ProjectsList() {
                 </table>
             </div>
 
+            {successToastMessage && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: '1rem',
+                        right: '1rem',
+                        zIndex: 140,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        backgroundColor: '#ecfdf5',
+                        color: '#065f46',
+                        border: '1px solid #a7f3d0',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '0.65rem 0.85rem',
+                        boxShadow: 'var(--shadow-md)',
+                        maxWidth: 'min(92vw, 26rem)',
+                    }}
+                >
+                    <CheckCircle2 size={18} />
+                    <span style={{ fontSize: '0.88rem', lineHeight: 1.35 }}>{successToastMessage}</span>
+                    <button
+                        type="button"
+                        onClick={closeSuccessToast}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065f46', display: 'flex', alignItems: 'center' }}
+                        title="Cerrar aviso"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
+            {deleteObraModal.isOpen && (
+                <div
+                    className="app-modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        backgroundColor: 'rgba(0,0,0,0.55)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 120,
+                        padding: '1rem',
+                    }}
+                >
+                    <div className="card" style={{ width: '100%', maxWidth: '560px', backgroundColor: 'white' }}>
+                        <div style={{ padding: '1.4rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                    <div style={{ width: '2.6rem', height: '2.6rem', borderRadius: '999px', backgroundColor: '#fee2e2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <AlertTriangle size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#7f1d1d' }}>Eliminar obra</h3>
+                                        <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+                                            Esta accion es permanente.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeDeleteObraModal}
+                                    disabled={isDeletingObra}
+                                    style={{ background: 'none', border: 'none', cursor: isDeletingObra ? 'not-allowed' : 'pointer', color: 'var(--text-muted)' }}
+                                    title="Cerrar"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div style={{ border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', backgroundColor: '#fff7f7', padding: '0.85rem 0.95rem', fontSize: '0.9rem' }}>
+                                <p style={{ margin: 0 }}>
+                                    Vas a eliminar la obra <strong>{deleteObraModal.denominacion}</strong>.
+                                </p>
+                                <p style={{ margin: '0.45rem 0 0 0', color: '#7f1d1d' }}>
+                                    Tambien se eliminaran sus datos relacionados:
+                                </p>
+                                <ul style={{ margin: '0.45rem 0 0 1.1rem', padding: 0, color: '#7f1d1d' }}>
+                                    <li>Documentos y archivos en almacenamiento</li>
+                                    <li>Visitas y reuniones</li>
+                                    <li>Libro de subcontratacion</li>
+                                    <li>Asignaciones y relaciones de agentes</li>
+                                </ul>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={closeDeleteObraModal}
+                                    disabled={isDeletingObra}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={confirmDeleteObra}
+                                    disabled={isDeletingObra}
+                                    style={{
+                                        backgroundColor: '#dc2626',
+                                        border: '1px solid #b91c1c',
+                                        color: 'white',
+                                        minWidth: '10.5rem',
+                                        justifyContent: 'center',
+                                    }}
+                                >
+                                    {isDeletingObra ? 'Eliminando...' : 'Eliminar obra y datos'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {isModalOpen && (
                 <CreateProjectModal
                     onClose={() => { setIsModalOpen(false); setEditingObra(null); }}
@@ -276,4 +461,5 @@ export default function ProjectsList() {
         </div>
     );
 }
+
 

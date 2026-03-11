@@ -18,7 +18,11 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
     const [personas, setPersonas] = useState<Persona[]>([]);
 
     // Quick Add Agent State
-    const [quickAddType, setQuickAddType] = useState<{ type: 'empresa' | 'persona', field: string } | null>(null);
+    const [quickAddType, setQuickAddType] = useState<{
+        type: 'empresa' | 'persona',
+        field: string,
+        forcedPersonaType?: string
+    } | null>(null);
 
     const [formData, setFormData] = useState({
         tipologiaCat: '',
@@ -163,7 +167,12 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
 
     const handleQuickAddPersona = async (data: any) => {
         try {
-            const newPersona = await createPersona(data);
+            const forcedType = quickAddType?.type === 'persona' ? quickAddType.forcedPersonaType : undefined;
+            const payload = {
+                ...data,
+                tipo: forcedType || data.tipo
+            };
+            const newPersona = await createPersona(payload);
             setPersonas(await getPersonas());
             if (quickAddType) {
                 setFormData(prev => ({
@@ -353,7 +362,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                         value={formData.coordinadorSysId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, coordinadorSysId: val }))}
                                         placeholder="Seleccionar..."
-                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'coordinadorSysId' })}
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'coordinadorSysId', forcedPersonaType: 'Coordinador SyS' })}
                                     />
                                 </div>
                                 <div className="input-group">
@@ -363,7 +372,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                         value={formData.directorObraId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, directorObraId: val }))}
                                         placeholder="Seleccionar..."
-                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'directorObraId' })}
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'directorObraId', forcedPersonaType: 'Director de obra' })}
                                     />
                                 </div>
                                 <div className="input-group">
@@ -373,7 +382,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                                         value={formData.jefeObraId}
                                         onChange={(val: string[]) => setFormData(p => ({ ...p, jefeObraId: val }))}
                                         placeholder="Seleccionar..."
-                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'jefeObraId' })}
+                                        onAddNew={() => setQuickAddType({ type: 'persona', field: 'jefeObraId', forcedPersonaType: 'Jefe de obra' })}
                                     />
                                 </div>
                             </div>
@@ -398,6 +407,8 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
             {quickAddType && quickAddType.type === 'persona' && (
                 <PersonaModal
                     empresas={empresas}
+                    forcedTipo={quickAddType.forcedPersonaType}
+                    lockTipo={Boolean(quickAddType.forcedPersonaType)}
                     onClose={() => setQuickAddType(null)}
                     onSave={handleQuickAddPersona}
                 />

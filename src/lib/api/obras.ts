@@ -22,6 +22,17 @@ export interface Obra {
     created_at?: string;
 }
 
+const STORAGE_REMOVE_BATCH_SIZE = 100;
+
+const chunkItems = <T,>(items: T[], size: number): T[][] => {
+    if (items.length === 0) return [];
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+        chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+};
+
 export const updateObraAgentes = async (id: string, agentes: any[]): Promise<void> => {
     const { error } = await supabase
         .from('obras')
@@ -196,14 +207,56 @@ export const updateObra = async (id: string, obraData: any, relations: any): Pro
 };
 
 export const deleteObra = async (id: string): Promise<void> => {
-    const { error } = await supabase
+    const { data: obraFiles, error: filesError } = await supabase
+        .from('obras_archivos')
+        .select('file_path')
+        .eq('obra_id', id);
+
+    if (filesError) {
+        console.error(`Error loading files before deleting obra ${id}:`, filesError);
+        throw filesError;
+    }
+
+    const filePaths = (obraFiles || [])
+        .map((row: any) => row.file_path)
+        .filter((path: any): path is string => typeof path === 'string' && path.length > 0);
+
+    for (const batch of chunkItems(filePaths, STORAGE_REMOVE_BATCH_SIZE)) {
+        const { error: removeError } = await supabase.storage
+            .from('documentos')
+            .remove(batch);
+
+        if (removeError) {
+            console.error(`Error removing storage files for obra ${id}:`, removeError);
+            throw removeError;
+        }
+    }
+
+    const cleanupResponses = await Promise.all([
+        supabase.from('obras_eventos').delete().eq('obra_id', id),
+        supabase.from('libro_subcontratas').delete().eq('obra_id', id),
+        supabase.from('obras_archivos').delete().eq('obra_id', id),
+        supabase.from('obras_contratistas').delete().eq('obra_id', id),
+        supabase.from('obras_promotores').delete().eq('obra_id', id),
+        supabase.from('obras_coordinadores').delete().eq('obra_id', id),
+        supabase.from('obras_directores').delete().eq('obra_id', id),
+        supabase.from('obras_jefes').delete().eq('obra_id', id)
+    ]);
+
+    const cleanupError = cleanupResponses.find((res: any) => res.error)?.error;
+    if (cleanupError) {
+        console.error(`Error cleaning related data for obra ${id}:`, cleanupError);
+        throw cleanupError;
+    }
+
+    const { error: obraError } = await supabase
         .from('obras')
         .delete()
         .eq('id', id);
 
-    if (error) {
-        console.error(`Error deleting obra ${id}:`, error);
-        throw error;
+    if (obraError) {
+        console.error(`Error deleting obra ${id}:`, obraError);
+        throw obraError;
     }
 };
 
