@@ -385,6 +385,10 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
                     message = `${message} Respuesta: ${rawResponseBody.slice(0, 180)}`;
                 }
 
+                if (response.status >= 500 && /No se pudo enviar el correo|Error al enviar el correo/i.test(message)) {
+                    message = `${message} Revisa en Netlify las variables SMTP_* y los logs de Functions.`;
+                }
+
                 throw new Error(message);
             }
 
@@ -394,7 +398,7 @@ export const EventReport: React.FC<EventReportProps> = ({ tipo, eventData, obra,
             console.error('Error enviando correo de notificacion:', error);
             const message =
                 error?.message ||
-                'No se pudo enviar la notificacion por correo. Revisa SMTP_* en Netlify y que la funcion este disponible.';
+                `No se pudo enviar la notificacion por correo. Endpoint: ${import.meta.env.VITE_EMAIL_NOTIFICATION_ENDPOINT || '/.netlify/functions/send-event-notification'}. Revisa SMTP_* en Netlify y que la funcion este disponible.`;
             alert(message);
         } finally {
             setIsSendingEmail(false);

@@ -136,12 +136,22 @@ export const handler = async (event) => {
   const smtpHost = process.env.SMTP_HOST || 'smtp.office365.com';
   const smtpPort = Number(process.env.SMTP_PORT || 587);
   const smtpFrom = process.env.SMTP_FROM || smtpUser;
+  const smtpSecure =
+    String(process.env.SMTP_SECURE || '').trim().toLowerCase() === 'true' ||
+    smtpPort === 465;
 
-  if (!smtpUser || !smtpPass || !smtpFrom) {
+  const missingEnv = [];
+  if (!smtpUser) missingEnv.push('SMTP_USER');
+  if (!smtpPass) missingEnv.push('SMTP_PASS');
+  if (!smtpFrom) missingEnv.push('SMTP_FROM');
+
+  if (missingEnv.length > 0) {
     return {
       statusCode: 500,
       headers: responseHeaders,
-      body: JSON.stringify({ error: 'Faltan variables SMTP en el entorno del servidor.' }),
+      body: JSON.stringify({
+        error: `Faltan variables SMTP en el entorno del servidor: ${missingEnv.join(', ')}`,
+      }),
     };
   }
 
@@ -149,13 +159,15 @@ export const handler = async (event) => {
     const transporter = nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
-      secure: smtpPort === 465,
+      secure: smtpSecure,
       auth: {
         user: smtpUser,
         pass: smtpPass,
       },
-      requireTLS: smtpPort === 587,
+      requireTLS: !smtpSecure && smtpPort === 587,
     });
+
+    await transporter.verify();
 
     const eventType = payload.eventType === 'reunion' ? 'reunion' : 'visita';
     const obra = payload.obra || {};
@@ -193,7 +205,9 @@ export const handler = async (event) => {
     console.error('Error sending notification email:', error);
     const detail = error?.message ? String(error.message) : '';
     const code = error?.code ? String(error.code) : '';
-    const composed = [code, detail].filter(Boolean).join(' - ');
+    const response = error?.response ? String(error.response) : '';
+    const command = error?.command ? String(error.command) : '';
+    const composed = [code, detail, response, command].filter(Boolean).join(' - ');
     return {
       statusCode: 500,
       headers: responseHeaders,
