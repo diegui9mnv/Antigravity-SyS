@@ -2,11 +2,15 @@ import { useState, useCallback, useMemo } from 'react';
 import { Card, CardHeader, CardBody, Badge } from '../components/ui';
 import { UploadCloud, Folder, FileText, Trash2, Search, X } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import { fileStructureTemplate, getPlantillasByCategory, savePlantilla, deletePlantilla } from '../store';
+import { fileStructureTemplate } from '../store';
+import {
+    getPlantillasByCategory as getPlantillasByCategoryDB,
+    savePlantilla as savePlantillaDB,
+    deletePlantilla as deletePlantillaDB,
+} from '../lib/api/plantillas';
 
-// Helper to flatten the categories for easy searching and selection
-const flattenCategories = (nodes: any[], parentPath = ''): { id: string, name: string, path: string }[] => {
-    let result: { id: string, name: string, path: string }[] = [];
+const flattenCategories = (nodes: any[], parentPath = ''): { id: string; name: string; path: string }[] => {
+    let result: { id: string; name: string; path: string }[] = [];
     for (const node of nodes) {
         const currentPath = parentPath ? `${parentPath} / ${node.name}` : node.name;
         if (node.type === 'category') {
@@ -22,21 +26,35 @@ const flattenCategories = (nodes: any[], parentPath = ''): { id: string, name: s
 export default function Plantillas() {
     const allCategories = useMemo(() => flattenCategories(fileStructureTemplate), []);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState<{ id: string, name: string, path: string } | null>(null);
+    const [selectedCategory, setSelectedCategory] = useState<{ id: string; name: string; path: string } | null>(null);
     const [templates, setTemplates] = useState<any[]>([]);
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+    const [isUploadingTemplates, setIsUploadingTemplates] = useState(false);
 
     const filteredCategories = useMemo(() => {
         if (!searchTerm) return allCategories;
         const lowerTerm = searchTerm.toLowerCase();
-        return allCategories.filter(cat =>
-            cat.name.toLowerCase().includes(lowerTerm) ||
-            cat.path.toLowerCase().includes(lowerTerm)
+        return allCategories.filter(
+            (cat) => cat.name.toLowerCase().includes(lowerTerm) || cat.path.toLowerCase().includes(lowerTerm)
         );
     }, [allCategories, searchTerm]);
 
-    const handleSelectCategory = (cat: { id: string, name: string, path: string }) => {
+    const loadTemplates = useCallback(async (categoryId: string) => {
+        setIsLoadingTemplates(true);
+        try {
+            setTemplates(await getPlantillasByCategoryDB(categoryId));
+        } catch (error) {
+            console.error('Error cargando plantillas:', error);
+            alert('No se pudieron cargar las plantillas.');
+            setTemplates([]);
+        } finally {
+            setIsLoadingTemplates(false);
+        }
+    }, []);
+
+    const handleSelectCategory = (cat: { id: string; name: string; path: string }) => {
         setSelectedCategory(cat);
-        setTemplates(getPlantillasByCategory(cat.id));
+        void loadTemplates(cat.id);
         setSearchTerm('');
     };
 
@@ -45,33 +63,38 @@ export default function Plantillas() {
         setTemplates([]);
     };
 
-    const handleDelete = (templateId: string) => {
+    const handleDelete = async (templateId: string) => {
         if (!selectedCategory) return;
-        if (window.confirm('¿Está seguro de que desea eliminar esta plantilla?')) {
-            deletePlantilla(selectedCategory.id, templateId);
-            setTemplates(getPlantillasByCategory(selectedCategory.id));
+        if (!window.confirm('¿Esta seguro de que desea eliminar esta plantilla?')) return;
+
+        try {
+            await deletePlantillaDB(selectedCategory.id, templateId);
+            await loadTemplates(selectedCategory.id);
+        } catch (error) {
+            console.error('Error eliminando plantilla:', error);
+            alert('No se pudo eliminar la plantilla.');
         }
     };
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
-        if (!selectedCategory || acceptedFiles.length === 0) return;
+    const onDrop = useCallback(
+        async (acceptedFiles: File[]) => {
+            if (!selectedCategory || acceptedFiles.length === 0) return;
 
-        acceptedFiles.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const newPlantilla = {
-                    name: file.name,
-                    size: file.size,
-                    type: file.type,
-                    data: e.target?.result as string,
-                    dateAdded: new Date().toISOString()
-                };
-                savePlantilla(selectedCategory.id, newPlantilla);
-                setTemplates(getPlantillasByCategory(selectedCategory.id));
-            };
-            reader.readAsDataURL(file);
-        });
-    }, [selectedCategory]);
+            setIsUploadingTemplates(true);
+            try {
+                for (const file of acceptedFiles) {
+                    await savePlantillaDB(selectedCategory.id, file);
+                }
+                await loadTemplates(selectedCategory.id);
+            } catch (error) {
+                console.error('Error guardando plantillas:', error);
+                alert('No se pudieron guardar las plantillas.');
+            } finally {
+                setIsUploadingTemplates(false);
+            }
+        },
+        [selectedCategory, loadTemplates]
+    );
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
@@ -87,7 +110,16 @@ export default function Plantillas() {
     return (
         <div style={{ padding: '2rem 0', maxWidth: '1200px', margin: '0 auto' }}>
             <div style={{ marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <h1
+                    style={{
+                        fontSize: '1.875rem',
+                        fontWeight: 'bold',
+                        color: 'var(--text-main)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                    }}
+                >
                     <FileText size={28} />
                     Gestión de Plantillas (CEMOSA)
                 </h1>
@@ -97,7 +129,6 @@ export default function Plantillas() {
             </div>
 
             <div className="plantillas-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
-                {/* Categorías Sidebar */}
                 <Card style={{ height: 'fit-content' }}>
                     <CardHeader>
                         <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -109,7 +140,16 @@ export default function Plantillas() {
                         <div style={{ padding: '1rem' }}>
                             <div className="input-group" style={{ marginBottom: '1rem' }}>
                                 <div style={{ position: 'relative' }}>
-                                    <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                    <Search
+                                        size={18}
+                                        style={{
+                                            position: 'absolute',
+                                            left: '1rem',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            color: 'var(--text-muted)',
+                                        }}
+                                    />
                                     <input
                                         type="text"
                                         placeholder="Buscar por nombre o ruta..."
@@ -123,7 +163,7 @@ export default function Plantillas() {
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '600px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                                 {filteredCategories.length > 0 ? (
-                                    filteredCategories.map(cat => (
+                                    filteredCategories.map((cat) => (
                                         <div
                                             key={cat.id}
                                             onClick={() => handleSelectCategory(cat)}
@@ -147,16 +187,13 @@ export default function Plantillas() {
                                         </div>
                                     ))
                                 ) : (
-                                    <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
-                                        No se encontraron categorías.
-                                    </div>
+                                    <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>No se encontraron categorías.</div>
                                 )}
                             </div>
                         </div>
                     </CardBody>
                 </Card>
 
-                {/* Área Principal de Plantillas */}
                 <div>
                     {!selectedCategory ? (
                         <Card style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}>
@@ -168,7 +205,6 @@ export default function Plantillas() {
                         </Card>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {/* Header de la categoría */}
                             <Card>
                                 <CardBody>
                                     <div className="plantillas-category-header" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)', borderLeft: '4px solid var(--color-primary)', border: '1px solid #e2e8f0' }}>
@@ -185,25 +221,29 @@ export default function Plantillas() {
                                 </CardBody>
                             </Card>
 
-                            {/* Zona de Subida */}
                             <Card>
                                 <CardHeader>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Subir Nueva Plantilla</h3>
                                 </CardHeader>
                                 <CardBody>
-                                    <div {...getRootProps()} style={{
-                                        border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
-                                        borderRadius: '12px',
-                                        padding: '3rem 2rem',
-                                        textAlign: 'center',
-                                        backgroundColor: isDragActive ? 'var(--color-primary-light)' : 'var(--color-background)',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                    }}>
+                                    <div
+                                        {...getRootProps()}
+                                        style={{
+                                            border: `2px dashed ${isDragActive ? 'var(--color-primary)' : 'var(--border-color)'}`,
+                                            borderRadius: '12px',
+                                            padding: '3rem 2rem',
+                                            textAlign: 'center',
+                                            backgroundColor: isDragActive ? 'var(--color-primary-light)' : 'var(--color-background)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                        }}
+                                    >
                                         <input {...getInputProps()} />
                                         <UploadCloud size={48} style={{ margin: '0 auto 1rem', color: isDragActive ? 'var(--color-primary)' : 'var(--text-muted)' }} />
                                         <h4 style={{ margin: '0 0 0.5rem', color: 'var(--text-main)' }}>
-                                            {isDragActive ? 'Suelta el archivo aquí...' : 'Arrastra un archivo o haz clic aquí'}
+                                            {isUploadingTemplates
+                                                ? 'Subiendo plantilla...'
+                                                : (isDragActive ? 'Suelta el archivo aquí...' : 'Arrastra un archivo o haz clic aquí')}
                                         </h4>
                                         <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
                                             Los documentos subidos aquí estarán disponibles para usar como plantilla en todas las obras.
@@ -212,63 +252,58 @@ export default function Plantillas() {
                                 </CardBody>
                             </Card>
 
-                            {/* Lista de Plantillas */}
                             <Card>
                                 <CardHeader>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         Plantillas Disponibles
-                                        <Badge status={templates.length > 0 ? "Completada" : "default"}>{templates.length}</Badge>
+                                        <Badge status={templates.length > 0 ? 'Completada' : 'default'}>{templates.length}</Badge>
                                     </h3>
                                 </CardHeader>
                                 <CardBody>
-                                    <div>
-                                        {templates.length === 0 ? (
-                                            <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                                                No hay plantillas subidas para esta subsección.
-                                            </div>
-                                        ) : (
-                                            <div className="table-container" style={{ margin: 0 }}>
-                                                <table className="table" style={{ width: '100%' }}>
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Nombre del Archivo</th>
-                                                            <th>Tamaño</th>
-                                                            <th>Fecha de Subida</th>
-                                                            <th style={{ textAlign: 'right' }}>Acciones</th>
+                                    {isLoadingTemplates ? (
+                                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando plantillas...</div>
+                                    ) : templates.length === 0 ? (
+                                        <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                            No hay plantillas subidas para esta subsección.
+                                        </div>
+                                    ) : (
+                                        <div className="table-container" style={{ margin: 0 }}>
+                                            <table className="table" style={{ width: '100%' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Nombre del Archivo</th>
+                                                        <th>Tamaño</th>
+                                                        <th>Fecha de Subida</th>
+                                                        <th style={{ textAlign: 'right' }}>Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {templates.map((tpl) => (
+                                                        <tr key={tpl.id}>
+                                                            <td>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                    <FileText size={16} className="text-blue-500" />
+                                                                    <span style={{ fontWeight: 500 }}>{tpl.name}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{formatBytes(tpl.size)}</td>
+                                                            <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{new Date(tpl.dateAdded).toLocaleDateString()}</td>
+                                                            <td style={{ textAlign: 'right' }}>
+                                                                <button
+                                                                    onClick={() => void handleDelete(tpl.id)}
+                                                                    className="btn btn-ghost"
+                                                                    style={{ color: 'var(--color-danger)', padding: '0.4rem' }}
+                                                                    title="Eliminar plantilla"
+                                                                >
+                                                                    <Trash2 size={18} />
+                                                                </button>
+                                                            </td>
                                                         </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {templates.map(tpl => (
-                                                            <tr key={tpl.id}>
-                                                                <td>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                        <FileText size={16} className="text-blue-500" />
-                                                                        <span style={{ fontWeight: 500 }}>{tpl.name}</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                                                                    {formatBytes(tpl.size)}
-                                                                </td>
-                                                                <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                                                                    {new Date(tpl.dateAdded).toLocaleDateString()}
-                                                                </td>
-                                                                <td style={{ textAlign: 'right' }}>
-                                                                    <button
-                                                                        onClick={() => handleDelete(tpl.id)}
-                                                                        className="btn btn-ghost"
-                                                                        style={{ color: 'var(--color-danger)', padding: '0.4rem' }}
-                                                                        title="Eliminar plantilla"
-                                                                    >
-                                                                        <Trash2 size={18} />
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-                                    </div>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
                                 </CardBody>
                             </Card>
                         </div>

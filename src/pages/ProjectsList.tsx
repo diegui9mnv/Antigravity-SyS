@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit2, FileSpreadsheet, MapPinned, Plus, Search, Trash2 } from 'lucide-react';
 import { deleteObra, getObras, type Obra } from '../lib/api/obras';
-import { Badge, Button } from '../components/ui';
+import { getEmpresas, getPersonas, type Empresa, type Persona } from '../lib/api/agenda';
+import { Badge, Button, MultiSelect } from '../components/ui';
 import CreateProjectModal from '../components/CreateProjectModal';
 
 const normalizeObraStatus = (status: string | null | undefined): 'solicitud' | 'preparacion' | 'completada' => {
@@ -24,22 +25,43 @@ const badgeStatusForObra = (status: string | null | undefined): 'solicitud' | 'e
     return normalized === 'preparacion' ? 'en curso' : normalized;
 };
 
+const toIdArray = (value: any): string[] => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (value === null || value === undefined || value === '') return [];
+    return [value];
+};
+
+type ProjectFilters = {
+    denominacion: string;
+    municipio: string;
+    expediente: string;
+    cebe: string;
+    estado: string;
+    contratistaIds: string[];
+    coordinadorSysIds: string[];
+};
+
 export default function ProjectsList() {
     const navigate = useNavigate();
     const [obras, setObras] = useState<Obra[]>([]);
+    const [empresas, setEmpresas] = useState<Empresa[]>([]);
+    const [personas, setPersonas] = useState<Persona[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingObra, setEditingObra] = useState<Obra | null>(null);
 
-    const [filters, setFilters] = useState({
+    const [filters, setFilters] = useState<ProjectFilters>({
         denominacion: '',
         municipio: '',
         expediente: '',
         cebe: '',
         estado: '',
+        contratistaIds: [],
+        coordinadorSysIds: [],
     });
 
     useEffect(() => {
         loadObras();
+        loadAgenda();
     }, []);
 
     const loadObras = async () => {
@@ -49,6 +71,16 @@ export default function ProjectsList() {
             setObras(data);
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const loadAgenda = async () => {
+        try {
+            const [empresasData, personasData] = await Promise.all([getEmpresas(), getPersonas()]);
+            setEmpresas(empresasData);
+            setPersonas(personasData);
+        } catch (error) {
+            console.error('Error loading agenda for filters:', error);
         }
     };
 
@@ -81,13 +113,26 @@ export default function ProjectsList() {
         setFilters((prev) => ({ ...prev, [name]: value }));
     };
 
-    const filteredObras = obras.filter((obra) => (
-        obra.denominacion.toLowerCase().includes(filters.denominacion.toLowerCase())
-        && (obra.municipio || '').toLowerCase().includes(filters.municipio.toLowerCase())
-        && (obra.expediente || '').toLowerCase().includes(filters.expediente.toLowerCase())
-        && (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase())
-        && (filters.estado === '' || normalizeObraStatus(obra.estado) === filters.estado)
-    ));
+    const filteredObras = obras.filter((obra: any) => {
+        const contratistas = toIdArray(obra?.contratista_ids ?? obra?.contratistaId);
+        const coordinadores = toIdArray(obra?.coordinador_sys_ids ?? obra?.coordinadorSysId);
+
+        return (
+            obra.denominacion.toLowerCase().includes(filters.denominacion.toLowerCase())
+            && (obra.municipio || '').toLowerCase().includes(filters.municipio.toLowerCase())
+            && (obra.expediente || '').toLowerCase().includes(filters.expediente.toLowerCase())
+            && (obra.cebe || '').toLowerCase().includes(filters.cebe.toLowerCase())
+            && (filters.estado === '' || normalizeObraStatus(obra.estado) === filters.estado)
+            && (
+                filters.contratistaIds.length === 0
+                || filters.contratistaIds.some((id) => contratistas.includes(id))
+            )
+            && (
+                filters.coordinadorSysIds.length === 0
+                || filters.coordinadorSysIds.some((id) => coordinadores.includes(id))
+            )
+        );
+    });
 
     return (
         <div>
@@ -142,6 +187,26 @@ export default function ProjectsList() {
                             <option value="completada">Completada</option>
                         </select>
                     </div>
+                    <div className="input-group" style={{ flex: '1 1 220px', marginBottom: 0 }}>
+                        <label className="input-label">Contratista</label>
+                        <MultiSelect
+                            options={empresas.map((empresa) => ({ value: empresa.id, label: empresa.razon_social }))}
+                            value={filters.contratistaIds}
+                            onChange={(value: string[]) => setFilters((prev) => ({ ...prev, contratistaIds: value }))}
+                            placeholder="Todos"
+                        />
+                    </div>
+                    <div className="input-group" style={{ flex: '1 1 220px', marginBottom: 0 }}>
+                        <label className="input-label">Coordinador SyS</label>
+                        <MultiSelect
+                            options={personas
+                                .filter((persona) => persona.tipo === 'Coordinador SyS')
+                                .map((persona) => ({ value: persona.id, label: `${persona.nombre} ${persona.apellidos || ''}`.trim() }))}
+                            value={filters.coordinadorSysIds}
+                            onChange={(value: string[]) => setFilters((prev) => ({ ...prev, coordinadorSysIds: value }))}
+                            placeholder="Todos"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -175,15 +240,15 @@ export default function ProjectsList() {
                                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                         {obra.fecha_inicio} <br /> {obra.fecha_fin}
                                     </td>
-                                    <td>
-                                        <div className="actions-cell">
-                                            <button onClick={(e) => { e.stopPropagation(); navigate(`/obras/localizacion?obraId=${obra.id}`); }} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--color-primary)' }} title="Ver Localización">
+                                    <td className="projects-actions-cell">
+                                        <div className="actions-cell projects-actions-group">
+                                            <button onClick={(e) => { e.stopPropagation(); navigate(`/obras/localizacion?obraId=${obra.id}`); }} className="btn btn-ghost project-list-action-btn" style={{ color: 'var(--color-primary)' }} title="Ver Localización">
                                                 <MapPinned size={18} />
                                             </button>
-                                            <button onClick={(e) => openEditModal(e, obra)} className="btn btn-ghost" style={{ padding: '0.4rem', color: 'var(--text-main)' }} title="Editar">
+                                            <button onClick={(e) => openEditModal(e, obra)} className="btn btn-ghost project-list-action-btn" style={{ color: 'var(--text-main)' }} title="Editar">
                                                 <Edit2 size={18} />
                                             </button>
-                                            <button onClick={(e) => handleDelete(e, obra.id, obra.denominacion)} className="btn btn-ghost" style={{ padding: '0.4rem', color: '#ef4444' }} title="Borrar">
+                                            <button onClick={(e) => handleDelete(e, obra.id, obra.denominacion)} className="btn btn-ghost project-list-action-btn" style={{ color: '#ef4444' }} title="Borrar">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>

@@ -27,6 +27,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
         denominacion: '',
         municipio: '',
         expediente: '',
+        pem: '',
         cebe: '',
         codigoObra: '',
         estado: 'solicitud',
@@ -58,6 +59,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                 denominacion: initialData.denominacion || '',
                 municipio: initialData.municipio || '',
                 expediente: initialData.expediente || '',
+                pem: initialData.pem?.toString() || '',
                 cebe: initialData.cebe || '',
                 codigoObra: initialData.codigo_obra || '',
                 estado: initialData.estado || 'solicitud',
@@ -129,6 +131,7 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
             denominacion: formData.denominacion,
             municipio: formData.municipio || null,
             expediente: formData.expediente || null,
+            pem: formData.pem !== '' ? Number(formData.pem) || null : null,
             cebe: formData.cebe || null,
             codigo_obra: formData.codigoObra || null,
             estado: formData.estado,
@@ -264,6 +267,19 @@ export default function CreateProjectModal({ onClose, onCreated, initialData }: 
                             <div className="input-group">
                                 <label className="input-label">Expediente</label>
                                 <input required name="expediente" value={formData.expediente} onChange={handleChange} className="input-field" placeholder="Ej. EXP-2023-01" />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">P.E.M.</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    name="pem"
+                                    value={formData.pem}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                    placeholder="Ej. 125000.00"
+                                />
                             </div>
                             <div className="input-group">
                                 <label className="input-label">CEBE</label>

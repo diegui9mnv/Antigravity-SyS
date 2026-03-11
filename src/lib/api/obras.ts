@@ -5,6 +5,7 @@ export interface Obra {
     denominacion: string;
     municipio: string | null;
     expediente: string | null;
+    pem: number | null;
     estado: string;
     codigo_obra: string | null;
     fecha_inicio: string | null;
@@ -16,6 +17,8 @@ export interface Obra {
     tipologia: string | null;
     duracion_num: number | null;
     duracion_unidad: string | null;
+    contratista_ids?: string[];
+    coordinador_sys_ids?: string[];
     created_at?: string;
 }
 
@@ -53,7 +56,48 @@ export const getObras = async (): Promise<Obra[]> => {
         console.error('Error fetching obras:', error);
         throw error;
     }
-    return data || [];
+    const obras = data || [];
+    if (obras.length === 0) return [];
+
+    const obraIds = obras.map((o: any) => o.id);
+
+    const [contratistasResult, coordinadoresResult] = await Promise.all([
+        supabase
+            .from('obras_contratistas')
+            .select('obra_id, empresa_id')
+            .in('obra_id', obraIds),
+        supabase
+            .from('obras_coordinadores')
+            .select('obra_id, persona_id')
+            .in('obra_id', obraIds)
+    ]);
+
+    if (contratistasResult.error) {
+        console.error('Error fetching obras_contratistas:', contratistasResult.error);
+        throw contratistasResult.error;
+    }
+    if (coordinadoresResult.error) {
+        console.error('Error fetching obras_coordinadores:', coordinadoresResult.error);
+        throw coordinadoresResult.error;
+    }
+
+    const contratistasByObra = (contratistasResult.data || []).reduce((acc: Record<string, string[]>, row: any) => {
+        if (!acc[row.obra_id]) acc[row.obra_id] = [];
+        acc[row.obra_id].push(row.empresa_id);
+        return acc;
+    }, {});
+
+    const coordinadoresByObra = (coordinadoresResult.data || []).reduce((acc: Record<string, string[]>, row: any) => {
+        if (!acc[row.obra_id]) acc[row.obra_id] = [];
+        acc[row.obra_id].push(row.persona_id);
+        return acc;
+    }, {});
+
+    return obras.map((obra: any) => ({
+        ...obra,
+        contratista_ids: contratistasByObra[obra.id] || [],
+        coordinador_sys_ids: coordinadoresByObra[obra.id] || [],
+    }));
 };
 
 export const getObraById = async (id: string) => {

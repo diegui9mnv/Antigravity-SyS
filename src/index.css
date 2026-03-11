@@ -462,6 +462,12 @@ a:hover {
   justify-content: flex-end;
 }
 
+.table .projects-actions-group .project-list-action-btn {
+  padding: 0.4rem;
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
 .app-modal-overlay {
   overscroll-behavior: contain;
 }
@@ -676,6 +682,33 @@ a:hover {
     gap: 0.75rem;
   }
 
+  .template-upload-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .template-upload-row > * {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .template-picker-panel {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .template-picker-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  .template-picker-row .template-add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   .projects-list-actions {
     width: 100%;
     display: grid !important;
@@ -686,6 +719,22 @@ a:hover {
   .projects-list-actions .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .projects-actions-group {
+    gap: 0.4rem !important;
+  }
+
+  .projects-actions-group .project-list-action-btn {
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0.55rem !important;
+    border-radius: var(--radius-md);
+  }
+
+  .projects-actions-group .project-list-action-btn svg {
+    width: 20px !important;
+    height: 20px !important;
   }
 }
 

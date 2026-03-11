@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Folders, File as FileIcon, UploadCloud, Trash2, Users, FileText, Building2, FileBadge, Shield, Menu, Calendar, Mail, FileStack, Briefcase, ChevronDown, ChevronUp, Download, Edit2, Pencil, StickyNote, X, Save, RotateCw, Copy } from 'lucide-react';
-import { updateObra as updateObraLocal, fileStructureTemplate, getPlantillasByCategory } from '../store';
+import { updateObra as updateObraLocal, fileStructureTemplate } from '../store';
 import { getDocumentos, getTodosDocumentos, uploadDocumento, updateDocumentoMetadata, deleteDocumento, getDocumentoUrl, type DocumentoMetaData } from '../lib/api/documentos';
 import { getEventos, createEvento, updateEvento, deleteEvento, type ObraEvento } from '../lib/api/eventos';
 import { getLibroSubcontratas as getLibroSubcontratasDB, createLibroEntry, updateLibroEntry, deleteLibroEntry, type LibroSubcontrataEntry } from '../lib/api/subcontratas';
 import { getObraWithRelations, updateObraAgentes, updateObraFields } from '../lib/api/obras';
 import { getEmpresas as getEmpresasAPI, getPersonas as getPersonasAPI, createEmpresa as createEmpresaAPI, updateEmpresa as updateEmpresaAPI, deleteEmpresa as deleteEmpresaAPI, createPersona as createPersonaAPI, updatePersona as updatePersonaAPI, deletePersona as deletePersonaAPI } from '../lib/api/agenda';
+import { getPlantillasByCategory as getPlantillasByCategoryDB, plantillaToFile } from '../lib/api/plantillas';
 import { createActaPdfUrl } from '../lib/actaPdf';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -57,6 +58,17 @@ const badgeStatusForObra = (status: string | null | undefined): string => {
     return normalized === 'preparacion' ? 'en curso' : normalized;
 };
 
+const formatPem = (value: any): string => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return String(value || '-');
+    return new Intl.NumberFormat('es-ES', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(numeric);
+};
+
 const collectCategoryOptions = (nodes: any[], parentPath: string = ''): Array<{ id: string; label: string }> => {
     return nodes.flatMap((node: any) => {
         const currentPath = parentPath ? `${parentPath} / ${node.name}` : node.name;
@@ -70,7 +82,7 @@ const collectCategoryOptions = (nodes: any[], parentPath: string = ''): Array<{ 
     });
 };
 
-const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, onClearEvent, allObraFiles }: any) => {
+const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory, activeFolder, setFolderStack, onClearEvent, allObraFiles, onNodeSelected }: any) => {
     // Determine icon based on node name
     let NodeIcon = Folders;
     if (node.name.includes("Contactos")) NodeIcon = Users;
@@ -108,6 +120,7 @@ const DocumentTreeNode = ({ node, level = 0, activeCategoryId, onSelectCategory,
             setFolderStack([node]); // Set this folder as the active view
             onSelectCategory(null);
         }
+        onNodeSelected?.();
     };
 
     return (
@@ -332,12 +345,26 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
     const [isExpanded, setIsExpanded] = useState(true);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
     const [isUploading, setIsUploading] = useState(false);
-
-    const plantillas = getPlantillasByCategory(category.id);
+    const [plantillas, setPlantillas] = useState<any[]>([]);
 
     useEffect(() => {
         getDocumentos(obraId, category.id).then(setCatFiles).catch(console.error);
     }, [obraId, category.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        getPlantillasByCategoryDB(category.id)
+            .then((data) => {
+                if (!cancelled) setPlantillas(data);
+            })
+            .catch((error) => {
+                console.error('Error fetching templates for category:', category.id, error);
+                if (!cancelled) setPlantillas([]);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [category.id]);
 
     const onDrop = async (acceptedFiles: File[]) => {
         setIsUploading(true);
@@ -391,7 +418,7 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
             </div>
             {isExpanded && (
                 <>
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+                    <div className="template-upload-row" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
                         <div
                             {...getRootProps()}
                             style={{
@@ -402,7 +429,8 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                                 backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
                                 cursor: 'pointer',
                                 transition: 'all var(--transition-fast)',
-                                flex: 2
+                                flex: 2,
+                                minWidth: 0
                             }}
                             className="hover:bg-surface-hover"
                         >
@@ -420,14 +448,14 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                         </div>
 
                         {plantillas.length > 0 && (
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <div className="template-picker-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>O elegir plantilla:</label>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <div className="template-picker-row" style={{ display: 'flex', gap: '0.5rem' }}>
                                     <select
                                         value={selectedTemplateId}
                                         onChange={(e) => setSelectedTemplateId(e.target.value)}
                                         className="input-field"
-                                        style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem' }}
+                                        style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', minWidth: 0 }}
                                     >
                                         <option value="">Seleccionar...</option>
                                         {plantillas.map((p: any) => (
@@ -439,18 +467,9 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                                         onClick={async () => {
                                             const plantilla = plantillas.find((p: any) => p.id === selectedTemplateId);
                                             if (plantilla) {
-                                                // Convert base64 data to blob
-                                                const byteCharacters = atob(plantilla.data.split(',')[1]);
-                                                const byteNumbers = new Array(byteCharacters.length);
-                                                for (let i = 0; i < byteCharacters.length; i++) {
-                                                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                                                }
-                                                const byteArray = new Uint8Array(byteNumbers);
-                                                const blob = new Blob([byteArray], { type: plantilla.type });
-                                                const file = new File([blob], plantilla.name, { type: plantilla.type });
-
                                                 setIsUploading(true);
                                                 try {
+                                                    const file = await plantillaToFile(plantilla);
                                                     await uploadDocumento(obraId, category.id, file);
                                                     const updatedFiles = await getDocumentos(obraId, category.id);
                                                     setCatFiles(updatedFiles);
@@ -463,7 +482,7 @@ const StandaloneCategoryDropzone = ({ obraId, category, onFilesChanged }: { obra
                                                 }
                                             }
                                         }}
-                                        className="btn btn-primary"
+                                        className="btn btn-primary template-add-btn"
                                         style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
                                     >
                                         Añadir
@@ -525,7 +544,9 @@ export default function ProjectDetails() {
     const [internalNotes, setInternalNotes] = useState('');
     const [allPersonas, setAllPersonas] = useState<any[]>([]);
     const [allEmpresas, setAllEmpresas] = useState<any[]>([]);
+    const [activeCategoryTemplates, setActiveCategoryTemplates] = useState<any[]>([]);
     const [selectedEmpresaId, setSelectedEmpresaId] = useState<string[]>([]);
+    const contentAreaRef = useRef<HTMLDivElement | null>(null);
 
     // Plantillas state
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
@@ -555,6 +576,28 @@ export default function ProjectDetails() {
         () => collectCategoryOptions(fileStructureTemplate),
         []
     );
+
+    useEffect(() => {
+        const categoryId = activeCategory?.id;
+        if (!categoryId || categoryId === 'cat-reuniones' || categoryId === 'cat-visitas') {
+            setActiveCategoryTemplates([]);
+            return;
+        }
+
+        let cancelled = false;
+        getPlantillasByCategoryDB(categoryId)
+            .then((templates) => {
+                if (!cancelled) setActiveCategoryTemplates(templates);
+            })
+            .catch((error) => {
+                console.error('Error fetching active category templates:', error);
+                if (!cancelled) setActiveCategoryTemplates([]);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeCategory?.id]);
 
     const persistAssignedContacts = async (next: any[]) => {
         const previous = assignedContacts;
@@ -603,6 +646,13 @@ export default function ProjectDetails() {
             || '';
         setQuickUploadCategoryId(defaultCategoryId);
         setIsQuickUploadModalOpen(true);
+    };
+
+    const scrollToContentAreaOnMobile = () => {
+        if (typeof window === 'undefined' || window.innerWidth > 920) return;
+        window.setTimeout(() => {
+            contentAreaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 70);
     };
 
     const handleSaveEmpresa = async (data: any) => {
@@ -698,6 +748,7 @@ export default function ProjectDetails() {
     const normalizeObraForUi = (ob: any) => ({
         ...ob,
         codigoObra: ob.codigo_obra ?? ob.codigoObra ?? '',
+        pem: ob.pem ?? null,
         promotorId: ob.promotor_ids ?? ob.promotorId ?? [],
         contratistaId: ob.contratista_ids ?? ob.contratistaId ?? [],
         coordinadorSysId: ob.coordinador_sys_ids ?? ob.coordinadorSysId ?? [],
@@ -1352,6 +1403,7 @@ export default function ProjectDetails() {
                         <div className="project-summary-meta flex gap-4" style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
                             <span>Ref: {obra.codigoObra}</span>
                             <span>Exp: {obra.expediente}</span>
+                            {obra.pem !== null && obra.pem !== undefined && obra.pem !== '' && <span>P.E.M.: {formatPem(obra.pem)}</span>}
                             {obra.cebe && <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>CEBE: {obra.cebe}</span>}
                         </div>
                         {/* Agents */}
@@ -1455,6 +1507,7 @@ export default function ProjectDetails() {
                                         setFolderStack={setFolderStack}
                                         onClearEvent={() => setActiveEvent(null)}
                                         allObraFiles={allObraFiles}
+                                        onNodeSelected={scrollToContentAreaOnMobile}
                                     />
                                 ))}
                             </div>
@@ -1462,6 +1515,7 @@ export default function ProjectDetails() {
                     </Card>
 
                     {/* Content Area */}
+                    <div ref={contentAreaRef} style={{ height: '100%' }}>
                     <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         {activeEvent ? (
                             <div style={{ height: '100%', padding: '1.5rem', overflowY: 'auto' }}>
@@ -1949,7 +2003,7 @@ export default function ProjectDetails() {
                                                 <>
                                                     {/* Dropzone with Template Selection */}
                                                     {activeCategory.id !== 'cat-reuniones' && activeCategory.id !== 'cat-visitas' && (
-                                                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+                                                        <div className="template-upload-row" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
                                                             <div
                                                                 {...getRootProps()}
                                                                 style={{
@@ -1960,7 +2014,8 @@ export default function ProjectDetails() {
                                                                     backgroundColor: isDragActive ? 'var(--color-surface-hover)' : 'var(--color-surface)',
                                                                     cursor: 'pointer',
                                                                     transition: 'all var(--transition-fast)',
-                                                                    flex: 2
+                                                                    flex: 2,
+                                                                    minWidth: 0
                                                                 }}
                                                             >
                                                                 <input {...getInputProps()} />
@@ -1975,42 +2030,34 @@ export default function ProjectDetails() {
                                                                 )}
                                                             </div>
 
-                                                            {getPlantillasByCategory(activeCategory.id).length > 0 && (
-                                                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '200px' }}>
+                                                            {activeCategoryTemplates.length > 0 && (
+                                                                <div className="template-picker-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '200px' }}>
                                                                     <label style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>O elegir plantilla de {activeCategory.name}:</label>
-                                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                                    <div className="template-picker-row" style={{ display: 'flex', gap: '0.5rem' }}>
                                                                         <select
                                                                             value={selectedTemplateId}
                                                                             onChange={(e) => setSelectedTemplateId(e.target.value)}
                                                                             className="input-field"
-                                                                            style={{ flex: 1, padding: '0.625rem 0.75rem' }}
+                                                                            style={{ flex: 1, padding: '0.625rem 0.75rem', minWidth: 0 }}
                                                                         >
                                                                             <option value="">Seleccionar...</option>
-                                                                            {getPlantillasByCategory(activeCategory.id).map((p: any) => (
+                                                                            {activeCategoryTemplates.map((p: any) => (
                                                                                 <option key={p.id} value={p.id}>{p.name}</option>
                                                                             ))}
                                                                         </select>
                                                                         <button
                                                                             disabled={!selectedTemplateId}
                                                                             onClick={async () => {
-                                                                                const plantilla = getPlantillasByCategory(activeCategory.id).find((p: any) => p.id === selectedTemplateId);
+                                                                                const plantilla = activeCategoryTemplates.find((p: any) => p.id === selectedTemplateId);
                                                                                 if (plantilla) {
-                                                                                    const byteCharacters = atob(plantilla.data.split(',')[1]);
-                                                                                    const byteNumbers = new Array(byteCharacters.length);
-                                                                                    for (let i = 0; i < byteCharacters.length; i++) {
-                                                                                        byteNumbers[i] = byteCharacters.charCodeAt(i);
-                                                                                    }
-                                                                                    const byteArray = new Uint8Array(byteNumbers);
-                                                                                    const blob = new Blob([byteArray], { type: plantilla.type });
-                                                                                    const file = new File([blob], plantilla.name, { type: plantilla.type });
-
+                                                                                    const file = await plantillaToFile(plantilla);
                                                                                     await uploadDocumento(id!, activeCategory.id, file);
                                                                                     setFiles(await getDocumentos(id!, activeCategory.id));
                                                                                     await refreshAllFiles();
                                                                                     setSelectedTemplateId('');
                                                                                 }
                                                                             }}
-                                                                            className="btn btn-primary"
+                                                                            className="btn btn-primary template-add-btn"
                                                                             style={{ padding: '0.625rem 1rem' }}
                                                                         >
                                                                             Añadir
@@ -2157,6 +2204,7 @@ export default function ProjectDetails() {
                             </div>
                         )}
                     </Card>
+                    </div>
                 </div>
 
                 {/* Event Modals */}
